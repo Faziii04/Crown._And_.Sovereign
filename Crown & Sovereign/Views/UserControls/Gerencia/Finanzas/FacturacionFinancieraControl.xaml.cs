@@ -1,0 +1,1 @@
+using System.Windows.Controls;using Crown___Sovereign.Data;namespace Crown___Sovereign.Views.UserControls.Gerencia.Finanzas;public partial class FacturacionFinancieraControl:UserControl{public FacturacionFinancieraControl(){InitializeComponent();InvoicesGrid.ItemsSource=SampleData.Facturas;}}

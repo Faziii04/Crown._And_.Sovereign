@@ -1,0 +1,1 @@
+using System.Windows.Controls;using Crown___Sovereign.Data;namespace Crown___Sovereign.Views.UserControls.Gerencia.Supervision;public partial class HabitacionesResumenControl:UserControl{public HabitacionesResumenControl(){InitializeComponent();RoomsGrid.ItemsSource=SampleData.Habitaciones;}}

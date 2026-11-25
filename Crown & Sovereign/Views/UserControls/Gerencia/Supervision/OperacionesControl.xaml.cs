@@ -1,0 +1,1 @@
+using System.Windows.Controls;namespace Crown___Sovereign.Views.UserControls.Gerencia.Supervision;public partial class OperacionesControl:UserControl{public OperacionesControl()=>InitializeComponent();}

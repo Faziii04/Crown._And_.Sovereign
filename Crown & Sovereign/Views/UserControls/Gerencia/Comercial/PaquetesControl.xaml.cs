@@ -1,0 +1,1 @@
+using System.Windows.Controls;using Crown___Sovereign.Services;namespace Crown___Sovereign.Views.UserControls.Gerencia.Comercial;public partial class PaquetesControl:UserControl{public PaquetesControl(){InitializeComponent();PackagesGrid.ItemsSource=new GerenciaService().Paquetes();}}

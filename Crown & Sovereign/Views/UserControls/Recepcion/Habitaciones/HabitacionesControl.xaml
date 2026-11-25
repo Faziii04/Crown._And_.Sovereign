@@ -1,0 +1,82 @@
+<UserControl x:Class="Crown___Sovereign.Views.UserControls.Recepcion.Habitaciones.HabitacionesControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:rooms="clr-namespace:Crown___Sovereign.Views.UserControls.Recepcion.Habitaciones"
+             xmlns:ops="clr-namespace:Crown___Sovereign.Views.UserControls.Recepcion.Habitaciones.Tablero"
+             xmlns:summary="clr-namespace:Crown___Sovereign.Views.UserControls.Recepcion.Habitaciones.Resumen"
+             xmlns:filters="clr-namespace:Crown___Sovereign.Views.UserControls.Recepcion.Habitaciones.Filtros"
+             xmlns:detail="clr-namespace:Crown___Sovereign.Views.UserControls.Recepcion.Habitaciones.Detalle">
+    <Grid Background="{StaticResource Canvas}">
+        <Grid x:Name="ReceptionPanel" Margin="24,0,24,18">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/><RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <Border x:Name="PageHeader" Grid.Row="0" Background="White" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="0,17">
+                <DockPanel>
+                    <StackPanel>
+                        <TextBlock Text="Habitaciones" FontSize="27" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
+                        <TextBlock Text="Estado operativo, preparación y próximos movimientos del hotel." Foreground="{StaticResource Muted}" Margin="0,3,0,0"/>
+                    </StackPanel>
+                    <StackPanel DockPanel.Dock="Right" HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <TextBlock x:Name="TodayText" TextAlignment="Right" Foreground="{StaticResource Muted}"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,5,0,0">
+                            <Button x:Name="AlertsButton" Content="Atención requerida" Click="Alerts_Click" Margin="0,0,7,0" Padding="10,5" Visibility="Collapsed"/>
+                            <Button x:Name="ExpandBoardButton" Content="⛶ Ampliar tablero" Click="ExpandBoard_Click" Margin="0,0,7,0" Padding="10,5"/>
+                            <Button Content="Actualizar" Click="Refresh_Click" Padding="12,5"/>
+                        </StackPanel>
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+            <summary:ResumenHabitacionesControl x:Name="Summary" Grid.Row="1" Margin="0,12,0,9"/>
+            <filters:FiltrosHabitacionesControl x:Name="Filters" Grid.Row="2"/>
+            <ops:NavegacionPisosControl x:Name="FloorNavigation" Grid.Row="3" Margin="0,8,0,5"/>
+            <Grid Grid.Row="4">
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                <Border x:Name="ExpandedToolbar" Grid.Row="0" Background="White" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="6" Padding="6,4" Margin="0,0,0,6" Visibility="Collapsed">
+                    <DockPanel>
+                        <TextBlock Text="Vista ampliada del tablero" VerticalAlignment="Center" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                            <Button x:Name="ExpandedAlertsButton" Content="Atención requerida" Click="Alerts_Click" Margin="0,0,7,0" Padding="10,4" Visibility="Collapsed"/>
+                            <Button Content="Actualizar" Click="Refresh_Click" Margin="0,0,7,0" Padding="10,4"/>
+                            <Button Content="Salir de vista ampliada" Click="RestoreBoard_Click" Padding="10,4"/>
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+                <ops:TableroHabitacionesControl x:Name="RoomBoard" Grid.Row="1"/>
+                <Border x:Name="DetailPanel" Grid.RowSpan="2" Background="{StaticResource Canvas}" Visibility="Collapsed">
+                    <Grid>
+                        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                        <Button Content="‹ Volver al tablero" Click="BackToBoard_Click" HorizontalAlignment="Left" Margin="0,4,0,8" Padding="10,5"/>
+                        <detail:DetalleHabitacionControl x:Name="RoomDetail" Grid.Row="1"/>
+                    </Grid>
+                </Border>
+            </Grid>
+            <Popup x:Name="AlertsPopup" Placement="Bottom" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+                <Border Width="470" MaxHeight="430" Background="White" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="8" Padding="8">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <summary:AlertasHabitacionesControl x:Name="Alerts"/>
+                    </ScrollViewer>
+                </Border>
+            </Popup>
+        </Grid>
+
+        <Grid x:Name="AdminPanel" Visibility="Collapsed">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+            <Border Background="White" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="24,18">
+                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <StackPanel><TextBlock Text="Habitaciones y pisos" FontSize="26" FontWeight="SemiBold"/><TextBlock Text="Infraestructura del hotel, capacidad y comodidades por habitación." Foreground="{StaticResource Muted}" Margin="0,4,0,0"/></StackPanel>
+                    <Button x:Name="CreateRoomButton" Grid.Column="1" Content="＋ Nueva habitación" VerticalAlignment="Center" Click="CreateRoom_Click"/>
+                </Grid>
+            </Border>
+            <Grid Grid.Row="1" Margin="24,0">
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                <rooms:FiltrosHabitacionesControl x:Name="AdminFilters"/>
+                <TabControl x:Name="RoomTabs" Grid.Row="1">
+                    <TabItem Header="Tablero por piso"><rooms:TableroHabitacionesControl x:Name="AdminRoomBoard"/></TabItem>
+                    <TabItem Header="Detalle de habitación"><rooms:DetalleHabitacionControl x:Name="AdminRoomDetail"/></TabItem>
+                </TabControl>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>

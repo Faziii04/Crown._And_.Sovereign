@@ -1,0 +1,1 @@
+using System.Windows.Controls;using Crown___Sovereign.Services;namespace Crown___Sovereign.Views.UserControls.Administracion.Sistema;public partial class AuditoriaControl:UserControl{public AuditoriaControl(){InitializeComponent();AuditGrid.ItemsSource=new AdministracionService().Auditoria();}}

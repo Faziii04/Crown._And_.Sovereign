@@ -1,0 +1,36 @@
+<UserControl x:Class="Crown___Sovereign.Views.UserControls.Shared.Navigation.SidebarControl" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" MinWidth="236" Width="236">
+    <Border Background="{StaticResource SidebarBackground}">
+        <Grid>
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <StackPanel Grid.Row="0" Margin="20,24,18,18">
+                <TextBlock Text="CROWN &amp; SOVEREIGN" Foreground="{StaticResource SidebarText}" FontSize="13" FontWeight="SemiBold"/>
+                <TextBlock Text="HOTEL PMS" Foreground="{StaticResource SidebarSecondary}" FontSize="10" FontWeight="SemiBold" Margin="0,5,0,0"/>
+            </StackPanel>
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl x:Name="NavigationItems" Margin="12,0,12,14">
+                    <ItemsControl.ItemTemplate><DataTemplate>
+                        <StackPanel>
+                            <TextBlock Text="{Binding Encabezado}" Foreground="{StaticResource SidebarSecondary}" FontSize="10" FontWeight="SemiBold" Margin="10,14,0,5">
+                                <TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Visible"/><Style.Triggers><DataTrigger Binding="{Binding Encabezado}" Value=""><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></TextBlock.Style>
+                            </TextBlock>
+                            <Button Tag="{Binding Nombre}" Click="Navigation_Click" MinHeight="46" AutomationProperties.Name="{Binding Nombre}">
+                                <Button.Style><Style TargetType="Button" BasedOn="{StaticResource SidebarButton}"><Style.Triggers><DataTrigger Binding="{Binding Seleccionado}" Value="True"><Setter Property="Background" Value="{StaticResource SidebarSelected}"/></DataTrigger></Style.Triggers></Style></Button.Style>
+                                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="28"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding Icono}" Foreground="#FFFFFFFF" FontSize="15" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Nombre}" Foreground="#FFFFFFFF" FontWeight="Medium" FontSize="14" VerticalAlignment="Center" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" Margin="4,0,0,0"/>
+                                </Grid>
+                            </Button>
+                        </StackPanel>
+                    </DataTemplate></ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+            <Border Grid.Row="2" BorderBrush="#46515F" BorderThickness="0,1,0,0" Padding="14,12">
+                <StackPanel>
+                    <TextBlock x:Name="EmployeeName" Foreground="{StaticResource SidebarText}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock x:Name="EmployeeRole" Foreground="{StaticResource SidebarSecondary}" FontSize="11" Margin="0,3,0,8"/>
+                    <Button Content="Cerrar sesión" Style="{StaticResource SidebarButton}" Background="#344253" Click="Logout_Click"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
+</UserControl>

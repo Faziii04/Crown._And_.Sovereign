@@ -1,0 +1,1 @@
+using System.Windows.Controls;using Crown___Sovereign.Services;namespace Crown___Sovereign.Views.UserControls.Gerencia.Comercial;public partial class PromocionesControl:UserControl{public PromocionesControl(){InitializeComponent();PromotionsGrid.ItemsSource=new GerenciaService().Promociones();}}

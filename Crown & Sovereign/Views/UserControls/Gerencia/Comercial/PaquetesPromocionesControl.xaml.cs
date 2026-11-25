@@ -1,0 +1,1 @@
+using System.Windows.Controls;namespace Crown___Sovereign.Views.UserControls.Gerencia.Comercial;public partial class PaquetesPromocionesControl:UserControl{public PaquetesPromocionesControl()=>InitializeComponent();}

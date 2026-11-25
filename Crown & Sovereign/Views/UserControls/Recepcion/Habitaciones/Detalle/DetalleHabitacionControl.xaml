@@ -1,0 +1,8 @@
+<UserControl x:Class="Crown___Sovereign.Views.UserControls.Recepcion.Habitaciones.Detalle.DetalleHabitacionControl" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:detail="clr-namespace:Crown___Sovereign.Views.UserControls.Recepcion.Habitaciones.Detalle">
+ <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+  <detail:EncabezadoHabitacionControl x:Name="Header"/>
+  <Border x:Name="RelocationAlert" Grid.Row="1" Background="#FFF8E8E8" BorderBrush="#B65757" BorderThickness="1" CornerRadius="6" Padding="9" Margin="0,7,0,0" Visibility="Collapsed"><DockPanel><TextBlock x:Name="RelocationText" FontWeight="SemiBold" Foreground="#8F3D3D" VerticalAlignment="Center"/><Button Content="Cambiar habitación" DockPanel.Dock="Right" Click="Relocate_Click"/></DockPanel></Border>
+  <detail:EstadosHabitacionControl x:Name="RoomStates" Grid.Row="2" Margin="0,8,0,7"/>
+  <TabControl x:Name="DetailTabs" Grid.Row="3"><TabItem Header="Resumen"><detail:ResumenHabitacionControl x:Name="SummaryView"/></TabItem><TabItem Header="Disponibilidad"><detail:DisponibilidadHabitacionControl x:Name="AvailabilityView"/></TabItem><TabItem Header="Preparación"><detail:PreparacionHabitacionControl x:Name="PreparationView"/></TabItem><TabItem Header="Incidencias"><detail:IncidenciasHabitacionControl x:Name="IncidentView"/></TabItem><TabItem Header="Características"><detail:CaracteristicasHabitacionControl x:Name="CharacteristicsView"/></TabItem></TabControl>
+ </Grid>
+</UserControl>

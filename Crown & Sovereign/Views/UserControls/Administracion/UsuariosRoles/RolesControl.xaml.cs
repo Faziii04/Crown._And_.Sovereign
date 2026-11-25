@@ -1,0 +1,1 @@
+using System.Windows.Controls;using Crown___Sovereign.Data;namespace Crown___Sovereign.Views.UserControls.Administracion.UsuariosRoles;public partial class RolesControl:UserControl{public RolesControl(){InitializeComponent();RolesGrid.ItemsSource=SampleData.Roles.Select(r=>new{r.Nombre,r.Descripcion,Usuarios=SampleData.Usuarios.Count(u=>u.Rol==r.Nombre)}).ToList();}}

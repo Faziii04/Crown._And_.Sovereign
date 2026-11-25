@@ -1,0 +1,1 @@
+using System.Windows.Controls;using Crown___Sovereign.Data;namespace Crown___Sovereign.Views.UserControls.Administracion.UsuariosRoles;public partial class UsuariosControl:UserControl{public UsuariosControl(){InitializeComponent();UsersGrid.ItemsSource=SampleData.Usuarios;}}

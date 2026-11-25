@@ -1,0 +1,1 @@
+using System.Windows.Controls;using Crown___Sovereign.Data;namespace Crown___Sovereign.Views.UserControls.Gerencia.Comercial;public partial class TemporadasControl:UserControl{public TemporadasControl(){InitializeComponent();SeasonsGrid.ItemsSource=SampleData.Temporadas;}}

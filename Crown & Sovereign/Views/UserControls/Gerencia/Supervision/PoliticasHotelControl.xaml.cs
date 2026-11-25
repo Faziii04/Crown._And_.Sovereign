@@ -1,0 +1,1 @@
+using System.Windows.Controls;using Crown___Sovereign.Services;namespace Crown___Sovereign.Views.UserControls.Gerencia.Supervision;public partial class PoliticasHotelControl:UserControl{public PoliticasHotelControl(){InitializeComponent();PoliciesGrid.ItemsSource=new GerenciaService().Politicas();}}

@@ -1,0 +1,6 @@
+<UserControl x:Class="Crown___Sovereign.Views.UserControls.Recepcion.Reservas.Disponibilidad.DisponibilidadControl" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:reservas="clr-namespace:Crown___Sovereign.Views.UserControls.Recepcion.Reservas.Disponibilidad">
+  <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+    <reservas:BusquedaDisponibilidadControl x:Name="SearchControl" BuscarSolicitado="SearchControl_BuscarSolicitado" LimpiarSolicitado="SearchControl_LimpiarSolicitado"/>
+    <ContentControl x:Name="ResultsHost" Grid.Row="1" Margin="0,12,0,0"/>
+  </Grid>
+</UserControl>

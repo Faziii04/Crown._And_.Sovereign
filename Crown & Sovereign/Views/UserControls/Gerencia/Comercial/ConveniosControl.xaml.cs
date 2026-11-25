@@ -1,0 +1,1 @@
+using System.Windows.Controls;using Crown___Sovereign.Services;namespace Crown___Sovereign.Views.UserControls.Gerencia.Comercial;public partial class ConveniosControl:UserControl{public ConveniosControl(){InitializeComponent();AgreementsGrid.ItemsSource=new GerenciaService().Convenios();}}

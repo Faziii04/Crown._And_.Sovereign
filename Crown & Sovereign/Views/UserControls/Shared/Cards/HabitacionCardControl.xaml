@@ -1,0 +1,8 @@
+<UserControl x:Class="Crown___Sovereign.Views.UserControls.Shared.Cards.HabitacionCardControl" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Width="190">
+    <Border Background="White" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="7" Padding="13" Margin="5"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <Grid><TextBlock Text="{Binding Numero}" FontSize="17" FontWeight="SemiBold"/><TextBlock Text="{Binding Tipo}" HorizontalAlignment="Right" Foreground="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center"/></Grid>
+        <StackPanel Grid.Row="1" Margin="0,9,0,4"><TextBlock Text="{Binding Estado}" FontWeight="SemiBold"/><TextBlock Text="{Binding Huesped}" Foreground="{StaticResource Muted}" FontSize="12" TextTrimming="CharacterEllipsis"/></StackPanel>
+        <StackPanel Grid.Row="2" Margin="0,5,0,8"><TextBlock Text="{Binding Capacidad, StringFormat='Capacidad: {0}'}" FontSize="11"/><TextBlock Text="{Binding Comodidades}" FontSize="10" Foreground="{StaticResource Muted}" TextWrapping="Wrap" MaxHeight="34"/><TextBlock Text="{Binding Limpieza}" Foreground="{StaticResource Warning}" FontSize="11" Margin="0,4,0,0"/><TextBlock x:Name="BlockedLabel" Text="Habitación bloqueada" Foreground="{StaticResource Danger}" FontWeight="SemiBold" FontSize="10"/></StackPanel>
+        <Button Grid.Row="3" Content="Ver detalles" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Stretch" Click="Details_Click"/>
+    </Grid></Border>
+</UserControl>

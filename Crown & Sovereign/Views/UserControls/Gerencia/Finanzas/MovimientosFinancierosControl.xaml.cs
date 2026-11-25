@@ -1,0 +1,1 @@
+using System.Windows.Controls;using Crown___Sovereign.Services;namespace Crown___Sovereign.Views.UserControls.Gerencia.Finanzas;public partial class MovimientosFinancierosControl:UserControl{public MovimientosFinancierosControl(){InitializeComponent();LedgerGrid.ItemsSource=new GerenciaService().Movimientos();}}

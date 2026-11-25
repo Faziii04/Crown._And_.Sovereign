@@ -1,0 +1,14 @@
+<Window x:Class="Crown___Sovereign.Views.Dialogs.Recepcion.AperturaCajaDialog" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Abrir turno de caja" Width="550" Height="540" MinHeight="500" WindowStartupLocation="CenterOwner" ResizeMode="CanResize" Background="{StaticResource Canvas}">
+    <Grid Margin="24"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <StackPanel><TextBlock Text="Abrir turno de caja" FontSize="24" FontWeight="SemiBold"/><TextBlock Text="Registra el efectivo inicial disponible." Foreground="{StaticResource Muted}" Margin="0,4,0,14"/></StackPanel>
+        <Border Grid.Row="1" Background="White" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="8" Padding="18"><StackPanel>
+            <TextBlock Text="Recepcionista" Foreground="{StaticResource Muted}"/><TextBlock x:Name="UserText" FontWeight="SemiBold" Margin="0,2,0,10"/>
+            <TextBlock Text="Fecha y hora de apertura" Foreground="{StaticResource Muted}"/><TextBlock x:Name="DateText" FontWeight="SemiBold" Margin="0,2,0,12"/>
+            <TextBlock Text="Fondo inicial (Bs)"/><TextBox x:Name="OpeningBox" Text="0,00" Margin="0,4,0,2"/>
+            <TextBlock Text="Puedes iniciar con Bs 0,00. Este fondo será la base del efectivo esperado." Foreground="{StaticResource Muted}" FontSize="12" TextWrapping="Wrap" Margin="0,3,0,8"/>
+            <TextBlock Text="Observaciones (opcional)"/><TextBox x:Name="NotesBox" Height="64" AcceptsReturn="True" TextWrapping="Wrap" VerticalContentAlignment="Top" Margin="0,4,0,4"/>
+            <TextBlock x:Name="ValidationText" Foreground="{StaticResource Danger}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+        </StackPanel></Border>
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0"><Button Content="Cancelar" Style="{StaticResource SecondaryButton}" IsCancel="True"/><Button Content="Confirmar apertura" IsDefault="True" Click="Open_Click"/></StackPanel>
+    </Grid>
+</Window>
