@@ -20,6 +20,14 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        // Keep the restored window usable on compact laptop displays and high-DPI work areas.
+        var workArea = SystemParameters.WorkArea;
+        MinWidth = Math.Min(900, workArea.Width);
+        MinHeight = Math.Min(560, workArea.Height);
+        Width = Math.Min(1200, workArea.Width * 0.92);
+        Height = Math.Min(780, workArea.Height * 0.92);
+        SizeChanged += (_, _) => Sidebar.Width = ActualWidth < 1100 ? 208 : 236;
+        Sidebar.Width = ActualWidth < 1100 ? 208 : 236;
         var usuario = SesionActual.Usuario ?? throw new InvalidOperationException("No hay una sesión autenticada.");
         _opciones = NavigationService.ParaRol(usuario.Rol);
         Sidebar.Configurar(usuario, _opciones);
