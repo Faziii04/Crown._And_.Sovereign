@@ -37,6 +37,9 @@ public static class SampleData
     public static readonly List<ServicioProductoModel> ServiciosProductos = [];
     public static readonly List<ReservaPaqueteServicioProductoModel> ReservaPaqueteServicioProductos = [];
     public static readonly List<ReservaServicioModel> ServiciosReserva = [];
+    public static readonly List<ReservaServicioAdquiridoModel> ServiciosAdquiridos = [];
+    public static readonly List<RecursoAdicionalModel> RecursosAdicionales = [];
+    public static readonly List<ReservaRecursoModel> ReservaRecursos = [];
     public static readonly List<SolicitudEspecialModel> SolicitudesEspeciales = [];
     public static readonly List<RecursoReservaModel> RecursosReserva = [];
     public static readonly List<ContactoListaEsperaModel> ContactosListaEspera = [];
@@ -186,6 +189,14 @@ public static class SampleData
             new(1,2,"Ilimitado",null,true), new(1,3,"Por estancia",2,true), new(1,6,"Ilimitado",null,true), new(1,8,"Ilimitado",null,true), new(1,20,"Por estancia",2,true), new(1,21,"Ilimitado",null,true),
             new(2,10,"Por día",1,true),
             new(3,14,"Por estancia",1,false), new(3,17,"Por estancia",1,false)
+        ]);
+        RecursosAdicionales.AddRange([
+            new() { RecursoId=1, Nombre="Cama adicional", Tipo="MOBILIARIO", Precio=100m, Descripcion="Cama individual adicional. No modifica la capacidad autorizada de la habitación.", Activo=true, TipoCobro="POR_NOCHE", StockTotal=15, RequierePreparacion=true },
+            new() { RecursoId=2, Nombre="Almohada viscoelástica", Tipo="ROPA_DE_CAMA", Precio=20m, Descripcion="Almohada de espuma con memoria.", Activo=true, TipoCobro="POR_ESTANCIA", StockTotal=30, RequierePreparacion=true },
+            new() { RecursoId=3, Nombre="Almohada hipoalergénica", Tipo="ROPA_DE_CAMA", Precio=0m, Descripcion="Almohada hipoalergénica sin costo.", Activo=true, TipoCobro="POR_ESTANCIA", StockTotal=25, RequierePreparacion=true },
+            new() { RecursoId=4, Nombre="Cuna para bebé", Tipo="MOBILIARIO", Precio=0m, Descripcion="Cuna portátil para la habitación.", Activo=true, TipoCobro="POR_ESTANCIA", StockTotal=4, RequierePreparacion=true },
+            new() { RecursoId=5, Nombre="Manta adicional", Tipo="ROPA_DE_CAMA", Precio=15m, Descripcion="Manta adicional para la estancia.", Activo=true, TipoCobro="POR_ESTANCIA", StockTotal=20, RequierePreparacion=true },
+            new() { RecursoId=6, Nombre="Silla ergonómica", Tipo="EQUIPAMIENTO", Precio=30m, Descripcion="Silla ergonómica de apoyo para la habitación.", Activo=true, TipoCobro="POR_ESTANCIA", StockTotal=null, RequierePreparacion=true }
         ]);
         ServiciosProductos.AddRange([new(10,5,1),new(10,19,1),new(10,8,1)]);
         // Reservation #3001 is a shared-room example: two guests share one acquired limited allowance.

@@ -107,16 +107,86 @@ public sealed class TarifaService
         return Enumerable.Range(0, (salida.Date - llegada.Date).Days).Sum(offset => TarifaPorNoche(room, llegada.Date.AddDays(offset)));
     }
     public decimal CalcularTotal(BorradorReserva draft)
+        => CalcularResumenEconomico(draft).Total;
+
+    public ResumenEconomicoReserva CalcularResumenEconomico(BorradorReserva draft)
     {
         var rooms = SampleData.Habitaciones.Where(room => draft.HabitacionesSeleccionadas.Contains(room.Id)).ToList();
         var lodging = rooms.Sum(room => CalcularAlojamiento(room, draft.Llegada, draft.Salida));
         var package = SampleData.Paquetes.FirstOrDefault(item => item.Id == draft.PaqueteId);
-        var addOns = draft.ServiciosAdicionales.Select(id => SampleData.Servicios.FirstOrDefault(item => item.Id == id)?.Precio ?? 0m).Sum();
-        var total = lodging + (package?.Precio ?? 0m) + addOns;
+        var packages = (draft.PaqueteId.HasValue ? draft.PrecioPaqueteAcordado ?? package?.Precio ?? 0m : 0m) * Math.Max(0, draft.PaqueteId.HasValue ? draft.CantidadPaquete : 0);
+        var resourceService = new RecursoAdicionalService();
+        var pricesPending = draft.RecursosAdicionales.Any(item => item.PrecioUnitarioAcordado is null || item.TipoCobroAplicado is null)
+            || draft.ServiciosAdquiridos.Any(item => item.PrecioUnitarioAcordado is null);
+        var resources = draft.RecursosAdicionales.Sum(item => item.PrecioUnitarioAcordado is decimal agreed && item.TipoCobroAplicado is string billing
+            ? resourceService.CalcularImporte(agreed, billing, item.Cantidad, Math.Max(0, (draft.Salida.Date - draft.Llegada.Date).Days)) : 0m);
+        var services = draft.ServiciosAdquiridos.Sum(item => item.PrecioUnitarioAcordado is decimal agreed ? item.Cantidad * agreed : 0m);
+        var legacyAddOns = draft.ServiciosAdquiridos.Count == 0 ? draft.ServiciosAdicionales.Distinct().Sum(id => SampleData.Servicios.FirstOrDefault(item => item.Id == id)?.Precio ?? 0m) : 0m;
+        services += legacyAddOns;
+        var total = lodging + packages + resources + services;
         var promotion = SampleData.Promociones.FirstOrDefault(item => item.Id == draft.PromocionId && item.Desde.Date <= draft.Llegada.Date && item.Hasta.Date >= draft.Llegada.Date);
-        if (promotion?.TipoDescuento.Equals("Porcentaje", StringComparison.OrdinalIgnoreCase) == true) total -= lodging * promotion.Valor / 100m;
-        else if (promotion?.TipoDescuento.Equals("Noches", StringComparison.OrdinalIgnoreCase) == true) total -= rooms.Sum(room => Enumerable.Range(0, Math.Min((int)promotion.Valor, (draft.Salida.Date - draft.Llegada.Date).Days)).Sum(offset => TarifaPorNoche(room, draft.Llegada.Date.AddDays(offset))));
-        return Math.Max(0, total);
+        var discounts = 0m;
+        if (promotion?.TipoDescuento.Equals("Porcentaje", StringComparison.OrdinalIgnoreCase) == true) discounts = lodging * promotion.Valor / 100m;
+        else if (promotion?.TipoDescuento.Equals("Noches", StringComparison.OrdinalIgnoreCase) == true) discounts = rooms.Sum(room => Enumerable.Range(0, Math.Min((int)promotion.Valor, (draft.Salida.Date - draft.Llegada.Date).Days)).Sum(offset => TarifaPorNoche(room, draft.Llegada.Date.AddDays(offset))));
+        discounts = Math.Min(total, Math.Max(0m, discounts));
+        const decimal taxes = 0m; // Current in-memory rate catalog does not mark prices as tax-exclusive.
+        return new(lodging, packages, resources, services, discounts, taxes, Math.Max(0m, total - discounts + taxes), pricesPending);
+    }
+}
+
+public sealed class RecursoAdicionalService
+{
+    public IReadOnlyList<RecursoAdicionalModel> ListarActivos() => SampleData.RecursosAdicionales.Where(item => item.Activo).OrderBy(item => item.Tipo).ThenBy(item => item.Nombre).ToList();
+
+    public int? ConsultarDisponibilidad(int recursoId, DateTime llegada, DateTime salida, int? excluirReservaId = null)
+    {
+        HabitacionDisponibilidadService.ValidarFechas(llegada, salida);
+        var resource = SampleData.RecursosAdicionales.FirstOrDefault(item => item.RecursoId == recursoId) ?? throw new InvalidOperationException("No se encontró el recurso adicional.");
+        if (resource.StockTotal is null) return null;
+        var periods = SampleData.ReservaRecursos.Where(item => item.RecursoId == recursoId && item.ReservaId != excluirReservaId && item.Cantidad > 0
+                && item.Estado is not ("CANCELADO" or "DEVUELTO"))
+            .Where(item => SampleData.Reservas.Any(reservation => reservation.Id == item.ReservaId && reservation.Estado is not ("Cancelada" or "Rechazada" or "Anulada")))
+            .Select(item => (Item: item, Reservation: SampleData.Reservas.First(reservation => reservation.Id == item.ReservaId)))
+            .Select(pair => (pair.Item, pair.Reservation, End: EsPendienteDevolucion(pair.Reservation) ? DateTime.MaxValue.Date : pair.Reservation.Salida.Date))
+            .Where(pair => pair.Reservation.Llegada.Date < salida.Date && pair.End > llegada.Date).ToList();
+        var peak = 0;
+        var boundaries = periods.SelectMany(pair => new[] { Max(pair.Reservation.Llegada.Date, llegada.Date), Min(pair.End, salida.Date) })
+            .Append(llegada.Date).Append(salida.Date).Distinct().OrderBy(item => item).ToList();
+        for (var i = 0; i + 1 < boundaries.Count; i++)
+        {
+            if (boundaries[i] >= boundaries[i + 1]) continue;
+            var concurrent = periods.Where(pair => pair.Reservation.Llegada.Date < boundaries[i + 1] && pair.End > boundaries[i]).Sum(pair => pair.Item.Cantidad);
+            peak = Math.Max(peak, concurrent);
+        }
+        return Math.Max(0, resource.StockTotal.Value - peak);
+    }
+
+    public void ValidarCantidadDisponible(int recursoId, DateTime llegada, DateTime salida, int cantidad, int? excluirReservaId = null)
+    {
+        if (cantidad < 0) throw new InvalidOperationException("La cantidad no puede ser negativa.");
+        if (cantidad == 0) return;
+        var resource = SampleData.RecursosAdicionales.FirstOrDefault(item => item.RecursoId == recursoId && (item.Activo || excluirReservaId.HasValue)) ?? throw new InvalidOperationException("El recurso no está disponible para nuevas reservas.");
+        var available = ConsultarDisponibilidad(recursoId, llegada, salida, excluirReservaId);
+        if (available is int remaining && cantidad > remaining) throw new InvalidOperationException($"Disponibilidad insuficiente para {resource.Nombre}. Cantidad solicitada: {cantidad}; disponible: {remaining}.");
+    }
+
+    public decimal CalcularImporte(decimal precioUnitario, string tipoCobro, int cantidad, int cantidadNoches)
+    {
+        if (precioUnitario < 0 || cantidad < 0 || cantidadNoches < 0) throw new InvalidOperationException("Los importes y cantidades deben ser válidos.");
+        return tipoCobro switch
+        {
+            "POR_NOCHE" => precioUnitario * cantidad * cantidadNoches,
+            "POR_ESTANCIA" => precioUnitario * cantidad,
+            _ => throw new InvalidOperationException("El recurso tiene una modalidad de cobro no válida.")
+        };
+    }
+
+    private static DateTime Max(DateTime a, DateTime b) => a > b ? a : b;
+    private static DateTime Min(DateTime a, DateTime b) => a < b ? a : b;
+    private static bool EsPendienteDevolucion(ReservaModel reservation)
+    {
+        var stay = SampleData.Estancias.FirstOrDefault(item => item.ReservaId == reservation.Id && item.Estado == "Activa");
+        return reservation.Estado == "Finalizada" || stay is not null && stay.CheckOut.Date <= DateTime.Today;
     }
 }
 

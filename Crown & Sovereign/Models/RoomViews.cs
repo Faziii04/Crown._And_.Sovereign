@@ -71,7 +71,7 @@ public sealed record ServiceRequestView(int Id, string Guest, string Room, strin
     public string Coverage { get; init; } = "Cobertura por confirmar"; public decimal EstimatedCharge { get; init; }
     public DateTime? ConfirmedDate { get; init; } public DateTime? CompletedDate { get; init; } public string Outcome { get; init; } = "";
 }
-public sealed record ServiceBenefitEvaluation(int GuestId,int StayId,int ReservationId,int ServiceId,string CoverageType,string PackageNames,int Allowance,int Consumed,int Remaining,bool Shared,bool RequiresAppointment,int DurationMinutes,decimal EstimatedCharge,string Label,string Detail,bool Available)
+public sealed record ServiceBenefitEvaluation(int GuestId,int StayId,int ReservationId,int ServiceId,string CoverageType,string PackageNames,int Allowance,int Consumed,int Remaining,bool Shared,bool RequiresAppointment,int DurationMinutes,decimal EstimatedCharge,string Label,string Detail,bool Available,int PurchasedAllowance=0,int PurchasedUsed=0,int PurchasedRemaining=0)
 {
     public string Status => CoverageType=="Ilimitado"?"Incluido · ilimitado":CoverageType=="No incluido"?"Servicio adicional":Remaining>0?$"Incluido · {Remaining} de {Allowance} usos restantes":"Beneficio agotado";
 }

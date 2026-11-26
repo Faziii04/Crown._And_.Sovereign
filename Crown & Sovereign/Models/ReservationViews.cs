@@ -75,12 +75,83 @@ public sealed class BorradorReserva
     public int? HuespedPrincipalId { get; set; }
     public List<int> HuespedesAcompanantes { get; } = [];
     public int? PaqueteId { get; set; }
+    public int CantidadPaquete { get; set; } = 1;
+    public decimal? PrecioPaqueteAcordado { get; set; }
     public int? PromocionId { get; set; }
     public List<int> ServiciosAdicionales { get; } = [];
+    public List<ReservaRecursoBorrador> RecursosAdicionales { get; } = [];
+    public List<ServicioAdquiridoBorrador> ServiciosAdquiridos { get; } = [];
     public string SolicitudesEspeciales { get; set; } = "";
     public int? GrupoId { get; set; }
     public int? ListaEsperaId { get; set; }
     public int? ReservaOrigenId { get; set; }
+    public int? ReservaConfirmadaId { get; set; }
     public int PasoInicial { get; set; }
     public bool ModoEdicion => ReservaOrigenId.HasValue;
 }
+
+public sealed class ReservaRecursoBorrador
+{
+    public int RecursoId { get; set; } public int Cantidad { get; set; } public decimal? PrecioUnitarioAcordado { get; set; }
+    public string? TipoCobroAplicado { get; set; } public string Estado { get; set; } = "PENDIENTE"; public string Observaciones { get; set; } = "";
+    public int? CargoId { get; set; }
+}
+
+public sealed class ServicioAdquiridoBorrador
+{
+    public int ServicioId { get; set; } public int? HuespedId { get; set; } public int? ReservaHabitacionId { get; set; }
+    public int Cantidad { get; set; } public decimal? PrecioUnitarioAcordado { get; set; } public string Estado { get; set; } = "ADQUIRIDO";
+    public int? CargoId { get; set; } public string Observaciones { get; set; } = "";
+}
+
+public sealed record ResumenEconomicoReserva(decimal Alojamiento, decimal Paquetes, decimal Recursos, decimal Servicios, decimal Descuentos, decimal Impuestos, decimal Total, bool PreciosPendientes = false);
+
+public sealed class RecursoAdicionalOpcion : System.ComponentModel.INotifyPropertyChanged
+{
+    private int _cantidad;
+    private string _observaciones = "";
+    public decimal? PrecioUnitarioAcordado { get; set; }
+    public string? TipoCobroAplicado { get; set; } = "POR_ESTANCIA";
+    public required RecursoAdicionalModel Recurso { get; init; }
+    public string Nombre => Recurso.Nombre; public string Tipo => Recurso.Tipo; public string Descripcion => Recurso.Descripcion;
+    public decimal? Precio => PrecioUnitarioAcordado; public string Modalidad => Precio is null || TipoCobroAplicado is null ? "Condición por verificar" : Precio == 0 ? "Sin costo" : TipoCobroAplicado == "POR_NOCHE" ? "Por noche" : "Por estancia";
+    public string PrecioTexto => Precio is null || TipoCobroAplicado is null ? "Precio/modalidad acordados sin verificar" : Precio == 0 ? "Sin costo" : $"Bs {Precio:N2} / {(TipoCobroAplicado == "POR_NOCHE" ? "noche" : "estancia")}";
+    public string DisponibilidadTexto { get; set; } = "Sin control de stock limitado";
+    public string DisponibilidadDetalle { get; set; } = "";
+    public int CantidadMaxima { get; set; } = 999;
+    public bool RequierePreparacion => Recurso.RequierePreparacion;
+    public string Imagen => Recurso.Imagen ?? "";
+    public bool TieneImagen => !string.IsNullOrWhiteSpace(Imagen);
+    public int Cantidad { get => _cantidad; set { var next = Math.Max(0, value); if (_cantidad == next) return; _cantidad = next; PropertyChanged?.Invoke(this, new(nameof(Cantidad))); PropertyChanged?.Invoke(this, new(nameof(Subtotal))); PropertyChanged?.Invoke(this, new(nameof(Seleccionado))); } }
+    public bool Seleccionado => Cantidad > 0;
+    public int Noches { get; set; } = 1;
+    public decimal Subtotal => (Precio ?? 0m) * Cantidad * (TipoCobroAplicado == "POR_NOCHE" ? Noches : TipoCobroAplicado == "POR_ESTANCIA" ? 1 : 0);
+    public string SubtotalTexto => $"Subtotal: Bs {Subtotal:N2}";
+    public string Observaciones { get => _observaciones; set { _observaciones = value; PropertyChanged?.Invoke(this, new(nameof(Observaciones))); } }
+    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+}
+
+public sealed class ServicioAdicionalOpcion : System.ComponentModel.INotifyPropertyChanged
+{
+    private int _cantidad;
+    public required ServicioModel Servicio { get; init; }
+    public string Nombre => Servicio.Nombre; public string Categoria { get; set; } = "";
+    public string Descripcion => Servicio.Descripcion; public decimal? PrecioUnitarioAcordado { get; set; }
+    public decimal Precio => PrecioUnitarioAcordado ?? 0m;
+    public string PrecioTexto => PrecioUnitarioAcordado is decimal price ? $"Bs {price:N2}" : "Precio acordado sin verificar";
+    public bool RequiereCita => Servicio.RequiereCita; public int DuracionMinutos => Servicio.DuracionMinutos; public string Proveedor => Servicio.Proveedor;
+    public string Cobertura { get; set; } = "No incluido"; public int Incluidos { get; set; }
+    public bool IncluidoIlimitado { get; set; }
+    public bool HabilitarCompra => !IncluidoIlimitado && PrecioUnitarioAcordado is decimal price && price >= 0;
+    public string CoberturaTexto => PrecioUnitarioAcordado is null ? "Precio acordado sin verificar · requiere revisión" : IncluidoIlimitado ? "Incluido sin límite · no requiere compra" : Incluidos > 0 ? $"Incluye {Incluidos} · unidades adicionales a Bs {Precio:N2}" : $"Adicional · Bs {Precio:N2} por unidad";
+    public int Cantidad { get => _cantidad; set { var next = Math.Max(0, value); if (_cantidad == next) return; _cantidad = next; PropertyChanged?.Invoke(this, new(nameof(Cantidad))); PropertyChanged?.Invoke(this, new(nameof(Subtotal))); } }
+    public int? HuespedId { get; set; }
+    public string Observaciones { get; set; } = "";
+    public decimal Subtotal => Cantidad * Precio;
+    public string SubtotalTexto => Cantidad > 0 ? $"Subtotal adicional: Bs {Subtotal:N2}" : "Sin compra adicional";
+    public string CitaTexto => RequiereCita ? "Requiere cita · se programa durante la estancia" : "No requiere cita";
+    public System.Collections.Generic.IReadOnlyList<HuespedReservaChoice> Destinatarios { get; set; } = [];
+    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+}
+
+public sealed record HuespedReservaChoice(int? Id, string Nombre);
