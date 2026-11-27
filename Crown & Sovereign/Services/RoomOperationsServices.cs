@@ -120,7 +120,10 @@ public sealed class NotificacionService
 {
     public void Crear(string mensaje, string destino)
     {
-        SampleData.Notificaciones.Insert(0, new(SampleData.Notificaciones.Count == 0 ? 1 : SampleData.Notificaciones.Max(item => item.Id) + 1, mensaje, destino, DateTime.Now, false));
+        var id = Persistencia.SiguienteId("notificacion", "notificacion_id", () => SampleData.Notificaciones.Count == 0 ? 1 : SampleData.Notificaciones.Max(item => item.Id) + 1);
+        var notificacion = new NotificacionModel(id, mensaje, destino, DateTime.Now, false);
+        EsperaRepositorio.InsertarNotificacion(notificacion);
+        SampleData.Notificaciones.Insert(0, notificacion);
     }
 
     public IReadOnlyList<NotificacionModel> Listar(string rol) => SampleData.Notificaciones
@@ -183,8 +186,12 @@ public sealed partial class EstanciaService
         if (SampleData.ReservaHabitaciones.Any(item => item.ReservaId == reservaId && item.HabitacionId == destination.Id)) throw new InvalidOperationException("La habitación destino ya pertenece a otra asignación de esta reserva.");
         if (!new HabitacionDisponibilidadService().EsDisponible(destination.Id, DateTime.Today, reservation.Salida.Date, reservaId)) throw new InvalidOperationException("La habitación destino tiene un conflicto para el resto de la estancia.");
 
+        var newAssignmentId = Persistencia.SiguienteId("reserva_habitacion", "reserva_habitacion_id",
+            () => SampleData.ReservaHabitaciones.Where(item => item != sourceAssignment).Select(item => item.ReservaHabitacionId).DefaultIfEmpty(0).Max() + 1);
+        int changeId;
+        try { changeId = EstanciaRepositorio.RegistrarCambioHabitacion(reservaId, source.Id, destination.Id, sourceAssignment.ReservaHabitacionId, newAssignmentId, guestIds, motivo); }
+        catch (Exception ex) { throw new InvalidOperationException("No se pudo registrar el cambio de habitación en la base de datos. " + ex.Message, ex); }
         SampleData.ReservaHabitaciones.Remove(sourceAssignment);
-        var newAssignmentId = SampleData.ReservaHabitaciones.Count == 0 ? 1 : SampleData.ReservaHabitaciones.Max(item => item.ReservaHabitacionId) + 1;
         SampleData.ReservaHabitaciones.Add(new(newAssignmentId, reservaId, destination.Id));
         SampleData.ReservaHabitacionHuespedes.RemoveAll(item => item.ReservaId == reservaId && item.ReservaHabitacionId == sourceAssignment.ReservaHabitacionId);
         foreach (var guestId in guestIds) SampleData.ReservaHabitacionHuespedes.Add(new(newAssignmentId, reservaId, guestId));
@@ -197,11 +204,12 @@ public sealed partial class EstanciaService
         foreach (var key in SampleData.Llaves.Where(item => item.EstanciaId == stay.Id && item.Estado == "Activa" && item.Codigo.Contains(source.Numero, StringComparison.OrdinalIgnoreCase)).ToList())
         {
             var index = SampleData.Llaves.FindIndex(item => item.Id == key.Id);
+            EstanciaRepositorio.CambiarEstadoLlave(key.Id, "Revocada");
             SampleData.Llaves[index] = key with { Estado = "Revocada" };
         }
-        foreach (var suffix in new[] { "A", "B" }) SampleData.Llaves.Add(new(SampleData.Llaves.Count == 0 ? 1 : SampleData.Llaves.Max(item => item.Id) + 1, stay.Id, $"CS-{destination.Numero}-{suffix}", "Activa"));
-        SampleData.CambiosHabitacion.Add(new(SampleData.CambiosHabitacion.Count + 1, reservaId, stay.Id, source.Id, destination.Id, guestIds, DateTime.Now, motivo, observaciones.Trim()));
-        SampleData.Auditoria.Insert(0, new(DateTime.Now, SesionActual.Usuario?.Usuario ?? "demo", "Cambio de habitación", source.Numero, $"{destination.Numero} · {motivo}"));
+        foreach (var suffix in new[] { "A", "B" }) SampleData.Llaves.Add(EstanciaRepositorio.NuevaLlave(stay.Id, $"CS-{destination.Numero}-{suffix}"));
+        SampleData.CambiosHabitacion.Add(new(changeId > 0 ? changeId : SampleData.CambiosHabitacion.Count + 1, reservaId, stay.Id, source.Id, destination.Id, guestIds, DateTime.Now, motivo, observaciones.Trim()));
+        AuditoriaRepositorio.Registrar(new(DateTime.Now, SesionActual.Usuario?.Usuario ?? "demo", "Cambio de habitación", source.Numero, $"{destination.Numero} · {motivo}"));
         new NotificacionService().Crear($"Huéspedes reubicados de {source.Numero} a {destination.Numero}.", "Recepción");
     }
 }

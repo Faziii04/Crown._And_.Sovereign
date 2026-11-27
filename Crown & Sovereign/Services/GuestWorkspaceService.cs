@@ -196,8 +196,11 @@ public sealed partial class HuespedService
         if (!NavigationService.Puede("Huéspedes")) throw new UnauthorizedAccessException("Tu rol no puede actualizar el consentimiento del huésped.");
         var guest = Obtener(guestId) ?? throw new InvalidOperationException("No se encontró el huésped.");
         if (guest.ConsentimientoDatos == nuevoEstado) return;
-        SampleData.ConsentimientosHistorial.Insert(0, new(SampleData.ConsentimientosHistorial.Count == 0 ? 1 : SampleData.ConsentimientosHistorial.Max(item => item.Id) + 1, guestId, guest.ConsentimientoDatos, nuevoEstado, DateTime.Now, SesionActual.Usuario?.Nombre ?? "Recepción", observaciones.Trim()));
+        var anterior = guest.ConsentimientoDatos;
         guest.ConsentimientoDatos = nuevoEstado;
+        var id = HuespedRepositorio.AnotarConsentimiento(guestId, observaciones.Trim())
+            ?? (SampleData.ConsentimientosHistorial.Count == 0 ? 1 : SampleData.ConsentimientosHistorial.Max(item => item.Id) + 1);
+        SampleData.ConsentimientosHistorial.Insert(0, new(id, guestId, anterior, nuevoEstado, DateTime.Now, SesionActual.Usuario?.Nombre ?? "Recepción", observaciones.Trim()));
     }
 
     public SolicitudEspecialModel RegistrarSolicitudEspecial(int guestId, int reservaId, string descripcion)
@@ -205,7 +208,8 @@ public sealed partial class HuespedService
         if (!NavigationService.Puede("Huéspedes")) throw new UnauthorizedAccessException("Tu rol no puede registrar solicitudes especiales.");
         if (string.IsNullOrWhiteSpace(descripcion)) throw new InvalidOperationException("Describe la solicitud.");
         if (!SampleData.ReservaHuespedes.Any(item => item.ReservaId == reservaId && item.HuespedId == guestId)) throw new InvalidOperationException("La reserva seleccionada no está asociada a este huésped.");
-        var item = new SolicitudEspecialModel(SampleData.SolicitudesEspeciales.Count == 0 ? 1 : SampleData.SolicitudesEspeciales.Max(row => row.Id) + 1, reservaId, descripcion.Trim(), "Pendiente");
+        var item = new SolicitudEspecialModel(Persistencia.SiguienteId("solicitud_especial", "solicitud_id", () => SampleData.SolicitudesEspeciales.Count == 0 ? 1 : SampleData.SolicitudesEspeciales.Max(row => row.Id) + 1), reservaId, descripcion.Trim(), "Pendiente");
+        HuespedRepositorio.InsertarSolicitud(item);
         SampleData.SolicitudesEspeciales.Insert(0, item);
         return item;
     }

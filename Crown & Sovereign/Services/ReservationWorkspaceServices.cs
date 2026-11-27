@@ -307,6 +307,7 @@ public sealed class GrupoReservaService
         if (!new HabitacionDisponibilidadService().EsDisponible(room.Id, reservation.Llegada, reservation.Salida, reservation.Id)) throw new InvalidOperationException("La habitación no está disponible para toda la estancia del grupo.");
         if (SampleData.ReservaHabitaciones.Any(item => item.ReservaId == reservaId && item.HabitacionId == room.Id)) return;
         SampleData.ReservaHabitaciones.Add(new(SiguienteAsignacionId(), reservaId, room.Id));
+        Guardar(reservaId);
     }
 
     public void AsignarHuesped(int reservaId, int habitacionId, int guestId)
@@ -320,6 +321,7 @@ public sealed class GrupoReservaService
         if (currentCount >= room.Capacidad && !SampleData.ReservaHabitacionHuespedes.Any(item => item.ReservaId == reservaId && item.HuespedId == guestId)) throw new InvalidOperationException("La capacidad de la habitación ya está completa.");
         if (SampleData.ReservaHabitacionHuespedes.Any(item => item.ReservaId == reservaId && item.HuespedId == guestId)) throw new InvalidOperationException("Este huésped ya tiene una habitación asignada.");
         SampleData.ReservaHabitacionHuespedes.Add(new(assignment.ReservaHabitacionId, reservaId, guestId));
+        Guardar(reservaId);
     }
 
     public void MoverHuesped(int reservaId, int habitacionId, int guestId)
@@ -333,10 +335,28 @@ public sealed class GrupoReservaService
         if (occupants >= room.Capacidad) throw new InvalidOperationException("La capacidad de la habitación ya está completa.");
         SampleData.ReservaHabitacionHuespedes.RemoveAll(item => item.ReservaId == reservaId && item.HuespedId == guestId);
         SampleData.ReservaHabitacionHuespedes.Add(new(target.ReservaHabitacionId, reservaId, guestId));
+        Guardar(reservaId);
     }
 
-    public void QuitarHuesped(int reservaId, int guestId) => SampleData.ReservaHabitacionHuespedes.RemoveAll(item => item.ReservaId == reservaId && item.HuespedId == guestId);
-    private static int SiguienteAsignacionId() => SampleData.ReservaHabitaciones.Count == 0 ? 1 : SampleData.ReservaHabitaciones.Max(item => item.ReservaHabitacionId) + 1;
+    public void QuitarHuesped(int reservaId, int guestId)
+    {
+        SampleData.ReservaHabitacionHuespedes.RemoveAll(item => item.ReservaId == reservaId && item.HuespedId == guestId);
+        Guardar(reservaId);
+    }
+
+    // Si la base rechaza el cambio, la reserva vuelve a como estaba guardada.
+    private static void Guardar(int reservaId)
+    {
+        try { ReservaRepositorio.Guardar(reservaId); }
+        catch (Exception ex)
+        {
+            ReservaRepositorio.Recargar(reservaId);
+            throw new InvalidOperationException("No se pudo guardar el cambio del grupo en la base de datos. " + ex.Message, ex);
+        }
+    }
+
+    private static int SiguienteAsignacionId() => Persistencia.SiguienteId("reserva_habitacion", "reserva_habitacion_id",
+        () => SampleData.ReservaHabitaciones.Count == 0 ? 1 : SampleData.ReservaHabitaciones.Max(item => item.ReservaHabitacionId) + 1);
 }
 
 public sealed class ListaEsperaService
@@ -360,23 +380,32 @@ public sealed class ListaEsperaService
     {
         HabitacionDisponibilidadService.ValidarFechas(llegada, salida);
         if (string.IsNullOrWhiteSpace(huesped) || personas < 1 || habitaciones < 1) throw new InvalidOperationException("Completa el huésped y las cantidades solicitadas.");
+        var person = guestId is int id ? SampleData.Huespedes.FirstOrDefault(item => item.Id == id) : SampleData.Huespedes.FirstOrDefault(item => item.Nombre == huesped.Trim());
+        if (Persistencia.Activa && person is null) throw new InvalidOperationException("Selecciona un huésped registrado para la lista de espera.");
         var request = new ListaEsperaModel(SiguienteSolicitudId(), huesped.Trim(), llegada.Date, salida.Date, tipo, "Pendiente", guestId, personas, habitaciones, observaciones.Trim());
+        if (person is not null) EsperaRepositorio.InsertarEspera(request, person.Id);
         SampleData.ListaEspera.Insert(0, request); return request;
     }
     public void RegistrarContacto(int id, string medio, string resultado, string observaciones)
     {
         var request = SampleData.ListaEspera.FirstOrDefault(item => item.Id == id) ?? throw new InvalidOperationException("No se encontró la solicitud de espera.");
-        SampleData.ContactosListaEspera.Insert(0, new(SampleData.ContactosListaEspera.Count + 1, id, DateTime.Now, medio, resultado, observaciones.Trim(), SesionActual.Usuario?.Usuario ?? "demo"));
+        var contact = new ContactoListaEsperaModel(SampleData.ContactosListaEspera.Count + 1, id, DateTime.Now, medio, resultado, observaciones.Trim(), SesionActual.Usuario?.Usuario ?? "demo");
+        var contactId = EsperaRepositorio.InsertarContacto(contact);
+        if (contactId > 0) contact = contact with { Id = contactId };
+        SampleData.ContactosListaEspera.Insert(0, contact);
         var index = SampleData.ListaEspera.FindIndex(item => item.Id == id);
-        SampleData.ListaEspera[index] = request with { Estado = resultado == "Sin respuesta" ? "Contactar" : resultado == "Interesado" ? "Interesado" : request.Estado };
+        var estado = resultado == "Sin respuesta" ? "Contactar" : resultado == "Interesado" ? "Interesado" : request.Estado;
+        EsperaRepositorio.CambiarEstadoEspera(id, estado);
+        SampleData.ListaEspera[index] = request with { Estado = estado };
     }
     public void Cerrar(int id)
     {
         var index = SampleData.ListaEspera.FindIndex(item => item.Id == id);
         if (index < 0) throw new InvalidOperationException("No se encontró la solicitud.");
         if (SampleData.ListaEspera[index].Estado == "Convertida") throw new InvalidOperationException("Una solicitud convertida no se puede cerrar desde la lista de espera.");
+        EsperaRepositorio.CambiarEstadoEspera(id, "Cerrada");
         SampleData.ListaEspera[index] = SampleData.ListaEspera[index] with { Estado = "Cerrada" };
     }
-    public void MarcarConvertida(int id) { var index = SampleData.ListaEspera.FindIndex(item => item.Id == id); if (index < 0) throw new InvalidOperationException("No se encontró la solicitud."); SampleData.ListaEspera[index] = SampleData.ListaEspera[index] with { Estado = "Convertida" }; }
-    private static int SiguienteSolicitudId() => SampleData.ListaEspera.Count == 0 ? 1 : SampleData.ListaEspera.Max(item => item.Id) + 1;
+    public void MarcarConvertida(int id) { var index = SampleData.ListaEspera.FindIndex(item => item.Id == id); if (index < 0) throw new InvalidOperationException("No se encontró la solicitud."); EsperaRepositorio.CambiarEstadoEspera(id, "Convertida"); SampleData.ListaEspera[index] = SampleData.ListaEspera[index] with { Estado = "Convertida" }; }
+    private static int SiguienteSolicitudId() => Persistencia.SiguienteId("lista_espera", "lista_espera_id", () => SampleData.ListaEspera.Count == 0 ? 1 : SampleData.ListaEspera.Max(item => item.Id) + 1);
 }
