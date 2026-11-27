@@ -9,6 +9,7 @@ using Crown___Sovereign.Views.UserControls.Recepcion.Habitaciones;
 using Crown___Sovereign.Views.UserControls.Recepcion.Estancias;
 using Crown___Sovereign.Views.UserControls.Recepcion.Huespedes;
 using Crown___Sovereign.Views.UserControls.Recepcion.Reservas;
+using Crown___Sovereign.Views.UserControls.Gerencia.Finanzas;
 using Crown___Sovereign.Views.Windows;
 
 namespace Crown___Sovereign;
@@ -33,7 +34,18 @@ public partial class MainWindow : Window
         Sidebar.Configurar(usuario, _opciones);
         Sidebar.NavigationRequested += (_, modulo) => AbrirModulo(modulo);
         Sidebar.LogoutRequested += (_, _) => CerrarSesion();
-        TopBar.NotificationsRequested += (_, _) => MessageBox.Show("• Tareas de limpieza prioritarias\n• Productos por reponer\n• Solicitudes de servicio por revisar", "Notificaciones");
+        TopBar.NotificationsRequested += (_, _) =>
+        {
+            var notifications = new NotificacionesWindow { Owner = this };
+            notifications.NavigationRequested += (_, notification) =>
+            {
+                AbrirModulo(notification.ModuloDestino);
+                if (notification.ModuloDestino == "Finanzas" && notification.TipoRegistroDestino is "Devolución" or "Anulación"
+                    && notification.RegistroDestinoId is int correctionId && MainContent.Content is FinanzasControl finances)
+                    finances.AbrirCorreccion(notification.TipoRegistroDestino, correctionId);
+            };
+            notifications.ShowDialog();
+        };
         AbrirModulo(_opciones[0].Nombre);
     }
 
@@ -53,6 +65,12 @@ public partial class MainWindow : Window
         UserControl control = destino == "Huéspedes" && _guestWorkspace is not null ? _guestWorkspace : new ModuleViewFactory().Crear(destino, role);
         if (control is RecepcionDashboardControl reception) reception.NavigationRequested += (_, destino) => AbrirModulo(destino);
         if (control is OperacionesDashboardControl operations) operations.NavigationRequested += (_, destino) => AbrirModulo(destino);
+        if (control is Crown___Sovereign.Views.UserControls.Gerencia.Dashboard.GerenciaDashboardControl manager) manager.NavigationRequested += (_, destino) =>
+        {
+            AbrirModulo(destino);
+            if (destino == "Convenios" && MainContent.Content is Crown___Sovereign.Views.UserControls.Gerencia.Comercial.ConveniosControl agreements)
+                agreements.AbrirVencimientos("Próximos");
+        };
         if (control is HabitacionesControl rooms) rooms.NavegacionSolicitada += (destino, selectedGuest) => AbrirModulo(destino, selectedGuest);
         if (control is HuespedesControl guests)
         {

@@ -122,6 +122,27 @@ public sealed class NotificacionService
     {
         SampleData.Notificaciones.Insert(0, new(SampleData.Notificaciones.Count == 0 ? 1 : SampleData.Notificaciones.Max(item => item.Id) + 1, mensaje, destino, DateTime.Now, false));
     }
+
+    public IReadOnlyList<NotificacionModel> Listar(string rol) => SampleData.Notificaciones
+        .Where(item => item.Destino.Equals(rol, StringComparison.OrdinalIgnoreCase) || item.Destino.Equals("Todos", StringComparison.OrdinalIgnoreCase))
+        .OrderByDescending(item => item.Fecha).ToList();
+
+    public void MarcarLeida(int id)
+    {
+        var index = SampleData.Notificaciones.FindIndex(item => item.Id == id);
+        if (index >= 0) SampleData.Notificaciones[index] = SampleData.Notificaciones[index] with { Leida = true };
+    }
+
+    public void Crear(string mensaje, string destino, string modulo, string tipoRegistro, int? registroId)
+    {
+        var id = SampleData.Notificaciones.Count == 0 ? 1 : SampleData.Notificaciones.Max(item => item.Id) + 1;
+        SampleData.Notificaciones.Insert(0, new(id, mensaje, destino, DateTime.Now, false)
+        {
+            ModuloDestino = modulo,
+            TipoRegistroDestino = tipoRegistro,
+            RegistroDestinoId = registroId
+        });
+    }
 }
 
 public sealed partial class EstanciaService

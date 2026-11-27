@@ -11,9 +11,13 @@ public static class SampleData
     public static readonly List<RolModel> Roles = [new(1,"Administrador","Configuración y usuarios"),new(2,"Recepcionista","Reservas, estancias y caja"),new(3,"Encargado de servicios","Servicios e instalaciones"),new(4,"Gerente","Supervisión y reportes")];
     public static readonly List<TemporadaModel> Temporadas = [new(1,"Temporada alta",DateTime.Today,DateTime.Today.AddMonths(3)),new(2,"Temporada regular",DateTime.Today.AddMonths(3),DateTime.Today.AddMonths(9))];
     public static readonly List<TarifaModel> TarifasHotel = [];
-    public static readonly List<PaqueteModel> Paquetes = [new(1,"Bienestar","Alojamiento, spa y desayuno",720,true),new(2,"Desayuno diario","Alojamiento y desayuno",560,true),new(3,"Escapada Andina","Dos noches y traslado",1480,true)];
-    public static readonly List<PromocionModel> Promociones = [new(1,"Reserva anticipada","Porcentaje",12,DateTime.Today.AddDays(-20),DateTime.Today.AddDays(60)),new(2,"Estadía extendida","Noches",1,DateTime.Today,DateTime.Today.AddMonths(4))];
-    public static readonly List<ConvenioModel> Convenios = [new(1,"Fundación Horizonte","Corporativo",DateTime.Today.AddMonths(-2),DateTime.Today.AddMonths(10),true),new(2,"Andes Travel","Agencia",DateTime.Today.AddMonths(-5),DateTime.Today.AddMonths(1),true)];
+    public static readonly List<CanalReservaModel> CanalesReserva = [new(1,"Directa",0m),new(2,"Agencia",15m),new(3,"Teléfono",0m),new(4,"Sitio web",3m),new(5,"Booking",15m)];
+    public static readonly List<TarifaConfiguracionModel> TarifasConfiguraciones = [];
+    public static readonly List<PaqueteModel> Paquetes = [new(1,"Bienestar","Acceso a servicios de spa y bienestar durante la estancia.",720,true),new(2,"Desayuno diario","Desayuno y productos incluidos durante la estancia.",560,true),new(3,"Escapada Andina","Experiencias turísticas y servicios de traslado.",1480,true)];
+    public static readonly List<PaqueteImagenModel> PaquetesImagenes = [];
+    public static readonly List<PromocionModel> Promociones = [new(1,"Promoción de temporada","Porcentaje",12,DateTime.Today.AddDays(-20),DateTime.Today.AddDays(60)),new(2,"Estadía extendida","Noches",1,DateTime.Today,DateTime.Today.AddMonths(4)),new(3,"Oferta finalizada","Porcentaje",8,DateTime.Today.AddMonths(-3),DateTime.Today.AddMonths(-2)),new(4,"Campaña pausada","Porcentaje",10,DateTime.Today.AddDays(15),DateTime.Today.AddMonths(2)){Activa=false}];
+    public static readonly List<ConvenioModel> Convenios = [];
+    public static readonly List<ConvenioServicioModel> ConveniosServicios = [];
     public static readonly List<PoliticaModel> Politicas = [new(1,"Check-in","Ingreso estándar del huésped","15:00"),new(2,"Check-out","Salida estándar del huésped","11:00"),new(3,"Cancelación","Plazo para cancelar sin penalidad","48 horas"),new(4,"Mascotas","Admisión sujeta a habitaciones asignadas","Consultar")];
     public static readonly List<ModuloModel> Modulos = [];
     public static readonly List<ReporteModel> Reportes = [];
@@ -35,6 +39,8 @@ public static class SampleData
     public static readonly List<PaqueteServicioModel> PaquetesServicios = [];
     public static readonly List<ReservaPaqueteServicioModel> ReservaPaqueteServicios = [];
     public static readonly List<ServicioProductoModel> ServiciosProductos = [];
+    public static readonly List<EmpleadoServicioModel> EmpleadosServicios = [];
+    public static readonly List<ServicioImagenModel> ServiciosImagenes = [];
     public static readonly List<ReservaPaqueteServicioProductoModel> ReservaPaqueteServicioProductos = [];
     public static readonly List<ReservaServicioModel> ServiciosReserva = [];
     public static readonly List<ReservaServicioAdquiridoModel> ServiciosAdquiridos = [];
@@ -102,7 +108,7 @@ public static class SampleData
             var arrival=active?DateTime.Today.AddDays(-1):futureIndex<3?DateTime.Today:DateTime.Today.AddDays(4+batch*15+futureIndex%4);
             var departure=active?(i==5||i%20==0?DateTime.Today:DateTime.Today.AddDays(2)):arrival.AddDays(2+futureIndex%4);
             int? grupoId=!active&&futureIndex<40?1:!active&&futureIndex<68?2:!active&&futureIndex<96?3:null;
-            var reservation=new ReservaModel{Id=3000+i,Huesped=Huespedes[i-1].Nombre,Habitacion=room.Id,Llegada=arrival,Salida=departure,Estado=active?"En estancia":i%13==0?"Pendiente":"Confirmada",Canal=i%4==0?"Agencia":"Directa",Paquete=Huespedes[i-1].Paquete,GrupoId=grupoId,Personas=1};
+            var reservation=new ReservaModel{Id=3000+i,Huesped=Huespedes[i-1].Nombre,Habitacion=room.Id,Llegada=arrival,Salida=departure,Estado=active?"En estancia":i%13==0?"Pendiente":"Confirmada",Canal=i%4==0?"Agencia":"Directa",Paquete=Huespedes[i-1].Paquete,GrupoId=grupoId,Personas=1,FechaCreacion=arrival.AddDays(-(i%14+1))};
             Reservas.Add(reservation);
             ReservaHabitaciones.Add(new(i,reservation.Id,room.Id));
             ReservaHuespedes.Add(new(reservation.Id,Huespedes[i-1].Id,true));
@@ -135,7 +141,7 @@ public static class SampleData
                 var room = Habitaciones[(guestId + visit * 23 - 1) % Habitaciones.Count];
                 var reservationId = historicalReservationId++;
                 var reservationRoomId = roomAssignmentId++;
-                Reservas.Add(new ReservaModel { Id = reservationId, Huesped = Huespedes[guestId - 1].Nombre, Habitacion = room.Id, Llegada = arrival, Salida = departure, Estado = "Finalizada", Paquete = Huespedes[guestId - 1].Paquete, Personas = 1 });
+                Reservas.Add(new ReservaModel { Id = reservationId, Huesped = Huespedes[guestId - 1].Nombre, Habitacion = room.Id, Llegada = arrival, Salida = departure, Estado = "Finalizada", Paquete = Huespedes[guestId - 1].Paquete, Personas = 1, FechaCreacion=arrival.AddDays(-(guestId%21+1)) });
                 ReservaHabitaciones.Add(new(reservationRoomId, reservationId, room.Id));
                 ReservaHuespedes.Add(new(reservationId, guestId, true));
                 ReservaHabitacionHuespedes.Add(new(reservationRoomId, reservationId, guestId));
@@ -148,47 +154,81 @@ public static class SampleData
         ListaEspera.AddRange([new(1,Huespedes[200].Nombre,DateTime.Today.AddDays(2),DateTime.Today.AddDays(5),"Suite","Pendiente",201,2,1),new(2,Huespedes[201].Nombre,DateTime.Today.AddDays(3),DateTime.Today.AddDays(6),"Doble","Pendiente",202,2,1),new(3,Huespedes[202].Nombre,DateTime.Today.AddDays(4),DateTime.Today.AddDays(7),"Superior","Contactar",203,1,1)]);
         var staffRoles=new[]{"Recepción","Limpieza","Mantenimiento","Servicios","Administración"};
         for(int i=1;i<=25;i++) Empleados.Add(new(i,$"{nombres[i%nombres.Length]} {apellidos[(i*3)%apellidos.Length]}",staffRoles[i%staffRoles.Length],$"empleado{i}@crownhotel.bo",$"+591 7{random.Next(1000000,9999999)}",i<=4?Usuarios[i-1].Rol:null));
-        for(int i=0;i<Tipos.Length;i++) TarifasHotel.Add(new(i+1,Tipos[i],"Temporada regular",420m+i*180m,DateTime.Today,DateTime.Today.AddMonths(6)));
+        for(int i=0;i<Tipos.Length;i++) TarifasHotel.Add(new(i+1,Tipos[i],"Tarifa base",420m+i*180m,DateTime.MinValue,DateTime.MaxValue));
+        var configId=1;
+        foreach (var season in Temporadas)
+        foreach (var rate in TarifasHotel)
+        {
+            var basePrice=rate.Precio;
+            var high=season.Nombre.Contains("alta",StringComparison.OrdinalIgnoreCase);
+            TarifasConfiguraciones.Add(new(configId++,rate.Id,season.Id,1,high?decimal.Round(basePrice*1.25m,2):basePrice*1.10m));
+            TarifasConfiguraciones.Add(new(configId++,rate.Id,season.Id,5,high?decimal.Round(basePrice*1.35m,2):basePrice*1.18m));
+        }
+        var tariffResolver=new Crown___Sovereign.Services.TarifaService();
+        foreach(var reservation in Reservas.Where(item=>item.Estado is "Confirmada" or "Pendiente" or "En estancia"))
+        {
+            var assignedRooms=ReservaHabitaciones.Where(item=>item.ReservaId==reservation.Id).Select(item=>item.HabitacionId).Append(reservation.Habitacion).Distinct().ToList();
+            foreach(var roomId in assignedRooms){var room=Habitaciones.First(item=>item.Id==roomId);for(var night=reservation.Llegada.Date;night<reservation.Salida.Date;night=night.AddDays(1))reservation.AlojamientoNochesAcordadas.Add(new(room.Id,night,tariffResolver.TarifaPorNoche(room,night,reservation.Canal)));}
+        }
         string[] modules=["Reservas","Habitaciones","Huéspedes","Estancias","Caja y facturación","Servicios","Atención de servicios","Agenda de servicios","Catálogo de servicios","Consumos","Productos e inventario","Limpieza","Mantenimiento","Objetos olvidados","Finanzas","Reportes"];
         for(int i=0;i<modules.Length;i++) Modulos.Add(new(i+1,modules[i],$"Módulo operativo · {modules[i]}",true));
         Reportes.AddRange([new(1,"Ocupación por piso","Operaciones",DateTime.Today.AddDays(-1),"Disponible"),new(2,"Ingresos y pagos","Finanzas",DateTime.Today.AddDays(-2),"Disponible"),new(3,"Uso de servicios","Servicios",DateTime.Today.AddDays(-3),"Disponible")]);
         var serviceSeeds = new (string Name,string Category,int? Parent,decimal Price,bool Appointment,int Duration,string Provider,bool Bookable,bool Transfer,string Description)[]
         {
             ("Spa","Bienestar",null,0,false,0,"Interno",false,false,"Área de spa y bienestar."),
-            ("Sauna","Bienestar",1,65,false,0,"Interno",true,false,"Acceso a sauna."),
-            ("Masaje relajante","Bienestar",1,155,true,45,"Spa Kallpa",true,false,"Sesión de masaje orientada a la relajación."),
-            ("Masaje terapéutico","Bienestar",1,180,true,60,"Spa Kallpa",true,false,"Sesión de masaje terapéutico."),
+            ("Sauna","Bienestar",1,50,false,0,"Interno",true,false,"Acceso a sauna."),
+            ("Masaje relajante","Bienestar",1,150,true,60,"Spa Kallpa",true,false,"Sesión de masaje de aproximadamente 60 minutos, orientada a la relajación y reducción de tensión muscular."),
+            ("Masaje terapéutico","Bienestar",1,180,true,90,"Spa Kallpa",true,false,"Sesión terapéutica coordinada con anticipación."),
             ("Gimnasio","Gimnasio",null,0,false,0,"Interno",false,false,"Área de gimnasio."),
             ("Acceso al gimnasio","Gimnasio",5,0,false,0,"Interno",true,false,"Acceso a las instalaciones del gimnasio."),
             ("Entrenador personal","Gimnasio",5,263,true,60,"Interno",true,false,"Sesión individual con entrenador personal."),
             ("Piscina","Piscina",null,0,false,0,"Interno",true,false,"Acceso a piscina."),
             ("Alimentación","Alimentación",null,0,false,0,"Interno",false,false,"Servicios de alimentos."),
-            ("Desayuno continental","Alimentación",9,55,false,0,"Interno",true,false,"Desayuno continental con café, sándwich y jugo."),
+            ("Desayuno continental","Alimentación",9,60,false,0,"Interno",true,false,"Desayuno continental con café, fruta y panadería."),
             ("Almuerzo","Alimentación",9,155,false,0,"Interno",true,false,"Servicio de almuerzo."),
             ("Servicio de habitación","Alimentación",9,167,false,0,"Interno",true,false,"Servicio de alimentos en habitación."),
             ("Transporte","Transporte",null,0,false,0,"Interno",false,false,"Servicios de transporte."),
-            ("Traslado al aeropuerto","Transporte",13,100,false,0,"Taxi Ejecutivo",true,true,"Traslado solicitado entre el hotel y el aeropuerto."),
+            ("Traslado al aeropuerto","Transporte",13,120,false,0,"Interno",true,true,"Traslado solicitado entre el hotel y el aeropuerto."),
             ("Taxi urbano","Transporte",13,45,false,0,"Taxi Ejecutivo",true,true,"Servicio de taxi urbano."),
             ("Recreación","Recreación",null,0,false,0,"Interno",false,false,"Actividades recreativas."),
-            ("Tour guiado","Recreación",16,180,true,120,"Andes Tours",true,false,"Actividad guiada por proveedor externo."),
+            ("Tour guiado","Recreación",16,350,true,240,"Interno",true,false,"Actividad guiada de cuatro horas coordinada con un proveedor externo."),
             ("Alquiler de bicicleta","Recreación",16,90,false,0,"Rent a Car Central",true,false,"Alquiler de bicicleta."),
             ("Bienestar","Bienestar",null,0,false,0,"Interno",false,false,"Actividades de bienestar."),
             ("Yoga","Bienestar",19,75,true,45,"Interno",true,false,"Sesión de yoga."),
             ("Meditación","Bienestar",19,60,false,0,"Interno",true,false,"Sesión de meditación."),
             ("Habitación","Habitación",null,0,false,0,"Interno",false,false,"Servicios asociados a la habitación."),
-            ("Lavandería","Habitación",22,80,false,0,"Interno",true,false,"Servicio de lavandería.")
+            ("Lavandería","Habitación",22,80,false,0,"Interno",true,false,"Servicio de lavandería."),
+            ("Tour cultural","Recreación",16,180,true,90,"Interno",true,false,"Recorrido cultural coordinado con un proveedor turístico externo."),
+            ("Tratamiento terapéutico externo","Bienestar",1,280,true,60,"Interno",true,false,"Tratamiento especializado prestado por un proveedor externo."),
+            ("Transporte privado","Transporte",13,250,false,0,"Interno",true,true,"Traslado privado coordinado con una empresa externa.")
         };
         for(var i=0;i<serviceSeeds.Length;i++)
         {
             var item=serviceSeeds[i];
-            Servicios.Add(new ServicioModel{Id=i+1,Nombre=item.Name,Categoria=item.Category,PadreId=item.Parent,Precio=item.Price,RequiereCita=item.Appointment,DuracionMinutos=item.Duration,Proveedor=item.Provider,Reservable=item.Bookable,RequiereTraslado=item.Transfer,Descripcion=item.Description,Cobertura="No incluido",UsosRestantes=null});
+            Servicios.Add(new ServicioModel{Id=i+1,Nombre=item.Name,Categoria=item.Category,PadreId=item.Parent,Precio=item.Price,RequiereCita=item.Appointment,DuracionMinutos=item.Duration,Reservable=item.Bookable,RequiereTraslado=item.Transfer,Descripcion=item.Description});
         }
-        Servicios.First(item=>item.Id==15).Disponible=false;
+        Convenios.AddRange([
+            new ConvenioModel(1,"Transporte Andino","Transporte",DateTime.Today.AddDays(-30),DateTime.Today.AddDays(180),true,"Convenio de transporte turístico","Traslados privados y transporte de huéspedes.","María Soliz","+591 4 445 1000","reservas@transporteandino.bo","Av. del Transporte 120","Tarifa confirmada por servicio. La coordinación operativa valida cada traslado.") ,
+            new ConvenioModel(2,"Movilidad Sucre","Transporte",DateTime.Today.AddDays(-15),DateTime.Today.AddDays(75),true,"Acuerdo de movilidad urbana","Proveedor alternativo para traslados y taxi.","Carlos Rojas","+591 4 645 2020","contacto@movilidadsucre.bo","Calle Junín 45","Confirmar disponibilidad y tarifa antes de asignar.") ,
+            new ConvenioModel(3,"Andes Travel","Turismo",DateTime.Today.AddDays(-90),DateTime.Today.AddDays(210),true,"Convenio de experiencias turísticas","Excursiones guiadas y recorridos culturales.","Lucía Paredes","+591 4 466 3300","operaciones@andestravel.bo","Av. de los Andes 88","Confirmar punto de encuentro y condiciones de cada excursión.") ,
+            new ConvenioModel(4,"Bienestar Integral","Bienestar",DateTime.Today.AddDays(-15),DateTime.Today.AddDays(12),true,"Acuerdo de terapias especializadas","Prestación externa de tratamientos terapéuticos.","Paola Méndez","+591 4 411 8800","agenda@bienestarintegral.bo","Zona Norte, local 8","Agendar con al menos 24 horas de anticipación.") ,
+            new ConvenioModel(5,"Rutas del Sur","Turismo",DateTime.Today.AddDays(20),DateTime.Today.AddDays(365),true,"Acuerdo futuro de excursiones","Acuerdo aún fuera de vigencia.","Elena Flores","+591 4 433 1200","reservas@rutasdelsur.bo","Calle Sucre 50","Vigente desde la fecha inicial indicada.") ,
+            new ConvenioModel(6,"Transporte Histórico","Transporte",DateTime.Today.AddDays(-360),DateTime.Today.AddDays(-30),true,"Convenio vencido","Registro histórico conservado para consultar operaciones anteriores.","Contacto histórico","","","","Condiciones históricas no reconstruidas.") ,
+            new ConvenioModel(7,"Movilidad Nocturna","Transporte",DateTime.Today.AddDays(-20),DateTime.Today.AddDays(300),false,"Acuerdo desactivado","Acuerdo desactivado administrativamente.","Equipo comercial","","","","No asignar nuevos servicios.")
+        ]);
+        ConveniosServicios.AddRange([
+            new(1,14,80m,"Traslado al aeropuerto · tarifa por trayecto."), new(1,26,180m,"Transporte privado · tarifa por trayecto."),
+            new(2,14,95m,"Alternativa aeroportuaria."), new(2,15,60m,"Costo superior al precio oficial; revisar antes de asignar."),
+            new(3,17,240m,"Excursión guiada."), new(3,24,100m,"Tour cultural."), new(3,18,70m,"Alquiler coordinado con proveedor externo."),
+            new(4,25,190m,"Tratamiento terapéutico."), new(4,3,100m,"Masaje relajante · costo por sesión."), new(4,4,125m,"Masaje terapéutico · costo por sesión."), new(5,14,75m,"No elegible antes del inicio de vigencia."),
+            new(6,14,68m,"Costo histórico; convenio vencido."), new(7,15,30m,"Relación desactivada.")
+        ]);
+        Servicios.First(item=>item.Id==18).Activo=false;
         // Package catalog relationships are copied into reservation-purchase snapshots below.
         PaquetesServicios.AddRange([
             new(1,2,"Ilimitado",null,true), new(1,3,"Por estancia",2,true), new(1,6,"Ilimitado",null,true), new(1,8,"Ilimitado",null,true), new(1,20,"Por estancia",2,true), new(1,21,"Ilimitado",null,true),
             new(2,10,"Por día",1,true),
-            new(3,14,"Por estancia",1,false), new(3,17,"Por estancia",1,false)
+            new(3,3,"Por día",1,false), new(3,14,"Por estancia",1,false), new(3,17,"Por estancia",1,false)
         ]);
         RecursosAdicionales.AddRange([
             new() { RecursoId=1, Nombre="Cama adicional", Tipo="MOBILIARIO", Precio=100m, Descripcion="Cama individual adicional. No modifica la capacidad autorizada de la habitación.", Activo=true, TipoCobro="POR_NOCHE", StockTotal=15, RequierePreparacion=true },
@@ -198,7 +238,12 @@ public static class SampleData
             new() { RecursoId=5, Nombre="Manta adicional", Tipo="ROPA_DE_CAMA", Precio=15m, Descripcion="Manta adicional para la estancia.", Activo=true, TipoCobro="POR_ESTANCIA", StockTotal=20, RequierePreparacion=true },
             new() { RecursoId=6, Nombre="Silla ergonómica", Tipo="EQUIPAMIENTO", Precio=30m, Descripcion="Silla ergonómica de apoyo para la habitación.", Activo=true, TipoCobro="POR_ESTANCIA", StockTotal=null, RequierePreparacion=true }
         ]);
-        ServiciosProductos.AddRange([new(10,5,1),new(10,19,1),new(10,8,1)]);
+        ServiciosProductos.AddRange([new(10,5,1),new(10,18,1),new(10,8,1)]);
+        var serviceEmployees=Empleados.Where(item=>item.Cargo=="Servicios").Take(8).ToList();
+        EmpleadosServicios.AddRange(serviceEmployees.Take(3).Select(item=>new EmpleadoServicioModel(item.Id,3)));
+        EmpleadosServicios.AddRange(serviceEmployees.Skip(1).Take(2).Select(item=>new EmpleadoServicioModel(item.Id,4)));
+        EmpleadosServicios.AddRange(serviceEmployees.Take(1).Select(item=>new EmpleadoServicioModel(item.Id,7)));
+        EmpleadosServicios.AddRange(serviceEmployees.Skip(2).Take(2).Select(item=>new EmpleadoServicioModel(item.Id,17)));
         // Reservation #3001 is a shared-room example: two guests share one acquired limited allowance.
         var sharedPackage = new ReservaPaqueteModel(3001,1,1,720m);
         if (!ReservaPaquetes.Any(item=>item.ReservaId==sharedPackage.ReservaId&&item.PaqueteId==sharedPackage.PaqueteId)) ReservaPaquetes.Add(sharedPackage);
@@ -210,12 +255,22 @@ public static class SampleData
         UsosServicio.AddRange([
             new UsoServicioModel(1,1,3,DateTime.Today.AddDays(-1).AddHours(10),true,0,"Completado"){EstanciaId=1},
             new UsoServicioModel(2,2,11,DateTime.Today.AddDays(-1).AddHours(8),false,168,"Completado"){EstanciaId=2},
-            new UsoServicioModel(3,250,7,DateTime.Today.AddDays(-1).AddHours(14),false,107,"Completado"){EstanciaId=81},
+            new UsoServicioModel(3,250,7,DateTime.Today.AddDays(-1).AddHours(14),false,107,"Completado"){EstanciaId=1},
             new UsoServicioModel(4,4,3,DateTime.Today.AddDays(-1).AddHours(10),true,0,"Completado"){EstanciaId=4},
             new UsoServicioModel(5,4,3,DateTime.Today.AddHours(9),true,0,"Completado"){EstanciaId=4}
         ]);
-        // One companion has their own active-stay record while sharing the reservation, room and package.
-        Estancias.Add(new EstanciaModel(81,3001,250,DateTime.Today.AddDays(-1),Reservas.First(item=>item.Id==3001).Salida,"Activa"){FolioId=1});
+        // Illustrative operational history keeps the applied terms, even if current costs later change.
+        UsosServicio.AddRange([
+            new UsoServicioModel(6,1,14,DateTime.Today.AddDays(-3).AddHours(10),false,120m,"Completado"){EstanciaId=1,ConvenioId=1,CostoProveedorAplicado=80m,PrecioAplicado=120m,Cobertura="Adicional"},
+            new UsoServicioModel(7,2,14,DateTime.Today.AddDays(-2).AddHours(12),true,0m,"Completado"){EstanciaId=2,ConvenioId=2,CostoProveedorAplicado=95m,PrecioAplicado=null,Cobertura="Paquete incluido"},
+            new UsoServicioModel(8,3,17,DateTime.Today.AddDays(-1).AddHours(14),false,350m,"Completado"){EstanciaId=3,ConvenioId=3,CostoProveedorAplicado=240m,PrecioAplicado=350m,Cobertura="Adicional"}
+        ]);
+        ServiciosReserva.AddRange([
+            new ReservaServicioModel(1,3001,1,14,"Completado",false){ConvenioId=1,CostoProveedorAplicado=80m,PrecioAplicado=120m,PrecioReferencia=120m,FechaUtilizacion=DateTime.Today.AddDays(-3).AddHours(10)},
+            new ReservaServicioModel(2,3002,2,14,"Completado",true){ConvenioId=2,CostoProveedorAplicado=95m,PrecioAplicado=null,PrecioReferencia=120m,FechaUtilizacion=DateTime.Today.AddDays(-2).AddHours(12)},
+            new ReservaServicioModel(3,3003,3,17,"Completado",false){ConvenioId=3,CostoProveedorAplicado=240m,PrecioAplicado=350m,PrecioReferencia=350m,FechaUtilizacion=DateTime.Today.AddDays(-1).AddHours(14)}
+        ]);
+        // Companion 250 shares reservation 3001 and active stay 1; one reservation remains one stay.
         SolicitudesEspeciales.AddRange([new(1,3004,"Habitación alejada del ascensor","Pendiente"),new(2,3009,"Almohada adicional","Atendida"),new(3,3014,"Llegada después de las 22:00","Pendiente")]);
         var appointmentServices=Servicios.Where(item=>item.RequiereCita&&item.Reservable).ToList();
         for(int i=1;i<=30;i++)
@@ -256,7 +311,7 @@ public static class SampleData
         Incidencias.Add(new(){Id=Incidencias.Max(i=>i.Id)+1,Habitacion=Habitaciones[87].Id,Descripcion="Televisor no enciende; revisión solicitada",Categoria="Equipamiento",Prioridad="Media",Estado="Abierta",BloqueaHabitacion=false,FechaReporte=DateTime.Today.AddHours(-1),ReportadaPor="Recepción"});
         var turnoverRoom=Habitaciones[4];
         var turnoverGuest=Huespedes[180];
-        var turnoverReservation=new ReservaModel{Id=5000,Huesped=turnoverGuest.Nombre,Habitacion=turnoverRoom.Id,Llegada=DateTime.Today,Salida=DateTime.Today.AddDays(2),Estado="Confirmada",Canal="Directa",Personas=1};
+        var turnoverReservation=new ReservaModel{Id=5000,Huesped=turnoverGuest.Nombre,Habitacion=turnoverRoom.Id,Llegada=DateTime.Today,Salida=DateTime.Today.AddDays(2),Estado="Confirmada",Canal="Directa",Personas=1,FechaCreacion=DateTime.Today};
         Reservas.Add(turnoverReservation);ReservaHabitaciones.Add(new(5000,turnoverReservation.Id,turnoverRoom.Id));ReservaHuespedes.Add(new(turnoverReservation.Id,turnoverGuest.Id,true));ReservaHabitacionHuespedes.Add(new(5000,turnoverReservation.Id,turnoverGuest.Id));
         Inspecciones.Add(new(100, Tareas.First(t=>t.Habitacion==Habitaciones[86].Id).Id, DateTime.Today.AddHours(-2), false, "No aprobada: revisar limpieza del baño."));
         ObjetosOlvidados.AddRange([new(1,"Auriculares inalámbricos",310,DateTime.Today,"En custodia","Encontrados en la mesa de noche"),new(2,"Bufanda azul",221,DateTime.Today.AddDays(-1),"En custodia","Entregada a recepción"),new(3,"Libro de viaje",407,DateTime.Today.AddDays(-7),"Devuelto","Retirado por el huésped")]);
@@ -294,6 +349,19 @@ public static class SampleData
         Cargos.Add(new CargoModel(Cargos.Count + 1, "Alojamiento · habitación 101", 500m, shiftToday.AddHours(7), 1, 1) { FolioId = 1 });
         Cargos.Add(new CargoModel(Cargos.Count + 1, "Alojamiento · habitación 102", 420m, shiftToday.AddHours(7), 2, 2) { FolioId = 2 });
         Cargos.Add(new CargoModel(Cargos.Count + 1, "Alojamiento · habitación 103", 780m, shiftToday.AddHours(7), 3, 3) { FolioId = 3 });
+        var acquiredService = Servicios.First(item => item.Id == 3);
+        const decimal acquiredServicePrice = 140m; // Historical purchase price; current catalog remains Bs 150.
+        var acquiredServiceChargeId = Cargos.Count + 1;
+        Cargos.Add(new CargoModel(acquiredServiceChargeId, "Servicio adquirido · Masaje relajante × 2", acquiredServicePrice * 2m, shiftToday.AddHours(7), 1, 1) { FolioId = 1 });
+        ServiciosAdquiridos.Add(new(1, 3001, 3, 1, null, 2, acquiredServicePrice, DateTime.Today.AddDays(-1).AddHours(13), "ADQUIRIDO", acquiredServiceChargeId, "Una sesión pendiente de uso."));
+        UsosServicio.Add(new UsoServicioModel(9, 1, 3, DateTime.Today.AddHours(11), false, 0m, "Completado") { EstanciaId = 1, ServicioAdquiridoId = 1, ConvenioId = 4, CostoProveedorAplicado = 100m, PrecioAplicado = acquiredServicePrice, Cobertura = "Adquirido previamente" });
+        ServiciosReserva.Add(new ReservaServicioModel(4, 3001, 1, 3, "Completado", false) { EstanciaId = 1, ServicioAdquiridoId = 1, ConvenioId = 4, CostoProveedorAplicado = 100m, PrecioAplicado = acquiredServicePrice, PrecioReferencia = acquiredService.Precio, FechaUtilizacion = DateTime.Today.AddHours(11), CargoId = acquiredServiceChargeId });
+        var bedChargeId = Cargos.Count + 1;
+        Cargos.Add(new CargoModel(bedChargeId, "Recurso adicional · Cama adicional × 1", 300m, shiftToday.AddHours(7), 1, 1) { FolioId = 1 });
+        ReservaRecursos.Add(new(3001, 1, 1, 100m, "POR_NOCHE", "ENTREGADO", "Solicitada durante la reserva.", bedChargeId));
+        ReservaRecursos.Add(new(3004, 4, 1, 0m, "POR_ESTANCIA", "PENDIENTE", "Preparar cuna antes de la salida."));
+        var returnedKeyIndex = Llaves.FindIndex(item => item.EstanciaId == 1 && item.Estado == "Activa");
+        if (returnedKeyIndex >= 0) Llaves[returnedKeyIndex] = Llaves[returnedKeyIndex] with { Estado = "Devuelta" };
         Cargos.Add(new CargoModel(Cargos.Count + 1, "Estancia histórica · huésped 1", 800m, yesterday.AddDays(-3), 1) { FolioId = 1000 });
         Cargos.Add(new CargoModel(Cargos.Count + 1, "Estancia histórica · huésped 2", 600m, yesterday.AddDays(-2), 2) { FolioId = 1001 });
         Cargos.Add(new CargoModel(Cargos.Count + 1, "Estancia histórica · huésped 3", 500m, yesterday.AddDays(-1), 3) { FolioId = 1002 });
@@ -310,6 +378,10 @@ public static class SampleData
         SeedRefund(2, 5, 30m, "Importe incorrecto", "Autorizada");
         SeedRefund(3, 7, 20m, "Cobro duplicado", "Autorizada", 4);
         Anulaciones.Add(new(1, 6, "Método de pago registrado incorrectamente", "Pendiente") { Solicitada = shiftToday.AddHours(11), UsuarioSolicitaId = 2, Descripcion = "Revisar el comprobante con el huésped." });
+        foreach (var item in Devoluciones.Where(item => item.Estado == "Pendiente"))
+            Notificaciones.Add(new(Notificaciones.Count + 1, $"Devolución pendiente de revisión · Pago #{item.PagoId} · Bs {item.Monto:N2}", "Gerente", item.Solicitada, false) { ModuloDestino = "Finanzas", TipoRegistroDestino = "Devolución", RegistroDestinoId = item.Id });
+        foreach (var item in Anulaciones.Where(item => item.Estado == "Pendiente"))
+            Notificaciones.Add(new(Notificaciones.Count + 1, $"Anulación pendiente de revisión · Pago #{item.PagoId}", "Gerente", item.Solicitada, false) { ModuloDestino = "Finanzas", TipoRegistroDestino = "Anulación", RegistroDestinoId = item.Id });
         Facturas.Add(new FacturaModel(100, 1000, "FAC-2026-100", yesterday.AddDays(-3), 800m, "Emitida")
         {
             Subtotal = 800m, Cliente = Huespedes[0].Nombre, DocumentoCliente = Huespedes[0].Documento, UsuarioEmiteId = 2,

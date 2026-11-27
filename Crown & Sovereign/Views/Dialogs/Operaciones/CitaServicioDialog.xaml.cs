@@ -15,7 +15,10 @@ public partial class CitaServicioDialog : Window
         InitializeComponent(); _guest = guest; _service = service; _existing = existing;
         GuestText.Text = $"{guest.Name} · Hab. {guest.Room} · {guest.Package}"; ServiceText.Text = service.Nombre;
         DatePicker.SelectedDate = existing?.Inicio.Date ?? DateTime.Today.AddDays(1); TimePicker.ItemsSource = Enumerable.Range(8, 12).Select(hour => $"{hour:00}:00").ToList(); TimePicker.SelectedItem = existing?.Inicio.ToString("HH:mm") ?? "10:00";
-        EmployeePicker.ItemsSource = SampleData.Empleados.Where(item => item.Cargo == "Servicios").ToList(); EmployeePicker.SelectedItem = existing is null||existing.AsignadoA=="Por asignar"?null:SampleData.Empleados.FirstOrDefault(item => item.Nombre == existing.AsignadoA);
+        var linked = SampleData.EmpleadosServicios.Where(item => item.ServicioId == service.Id && item.Activo).Select(item => item.EmpleadoId).ToHashSet();
+        EmployeePicker.ItemsSource = SampleData.Empleados.Where(item => linked.Count == 0 ? item.Cargo == "Servicios" : linked.Contains(item.Id)).OrderBy(item => item.Nombre).ToList();
+        EmployeeHint.Text = linked.Count == 0 ? "Sin empleados asociados al servicio; se muestran colaboradores de servicios. Verifica la configuración." : "Solo se muestran empleados asociados a este servicio.";
+        EmployeePicker.SelectedItem = existing is null||existing.AsignadoA=="Por asignar"?null:SampleData.Empleados.FirstOrDefault(item => item.Nombre == existing.AsignadoA);
     }
     private void Save_Click(object sender, RoutedEventArgs e)
     {

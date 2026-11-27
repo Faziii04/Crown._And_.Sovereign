@@ -149,12 +149,19 @@ public sealed class FolioService
     }
     public IReadOnlyList<FolioLine> ConsultarMovimientosPorFolio(int folioId)
     {
-        var charges = SampleData.Cargos.Where(item => item.FolioId == folioId).Select(item => new FolioLine(item.Fecha, "Cargo", item.Concepto, item.Monto));
-        var payments = SampleData.Pagos.Where(item => item.FolioId == folioId).Select(item => new FolioLine(item.Fecha, item.Estado == "Anulado" ? "Anulación" : "Pago", $"{item.Concepto} · {item.Metodo}", -item.Monto));
+        var charges = SampleData.Cargos.Where(item => item.FolioId == folioId).Select(item => new FolioLine(item.Fecha, item.Anulado ? "Anulación" : "Cargo", item.Concepto, item.Anulado ? 0m : item.Monto) { Origen = OrigenCargo(item.Concepto), Estado = item.Anulado ? "Anulado" : "Aplicado" });
+        var payments = SampleData.Pagos.Where(item => item.FolioId == folioId).Select(item => new FolioLine(item.Fecha, item.Estado == "Anulado" ? "Anulación" : "Pago", $"{item.Concepto} · {item.Metodo}", item.Estado == "Anulado" ? 0m : -item.Monto) { Origen = "Caja", Estado = item.Estado });
         var refunds = SampleData.Devoluciones.Where(item => item.Estado == "Ejecutada" && SampleData.Pagos.FirstOrDefault(payment => payment.Id == item.PagoId)?.FolioId == folioId)
-            .Select(item => new FolioLine(item.Ejecutada ?? item.Solicitada, "Devolución", item.Motivo, item.Monto));
+            .Select(item => new FolioLine(item.Ejecutada ?? item.Solicitada, "Devolución", item.Motivo, item.Monto) { Origen = "Corrección financiera", Estado = "Ejecutada" });
         return charges.Concat(payments).Concat(refunds).OrderByDescending(item => item.Fecha).ToList();
     }
+    private static string OrigenCargo(string concept)
+        => concept.StartsWith("Alojamiento", StringComparison.OrdinalIgnoreCase) ? "Alojamiento"
+            : concept.StartsWith("Recurso", StringComparison.OrdinalIgnoreCase) ? "Recurso adicional"
+            : concept.StartsWith("Servicio adquirido", StringComparison.OrdinalIgnoreCase) ? "Servicio adquirido"
+            : concept.StartsWith("Consumo", StringComparison.OrdinalIgnoreCase) ? "Consumo"
+            : concept.StartsWith("Servicio", StringComparison.OrdinalIgnoreCase) || concept.StartsWith("Masaje", StringComparison.OrdinalIgnoreCase) ? "Servicio utilizado"
+            : "Cargo adicional";
     public int ContarMovimientosSinEstancia(int estanciaId)
     {
         var stay = SampleData.Estancias.First(item => item.Id == estanciaId);
@@ -189,6 +196,24 @@ public sealed class FolioService
         var stay = SampleData.Estancias.FirstOrDefault(item => item.Id == estanciaId && item.Estado == "Activa") ?? throw new InvalidOperationException("La estancia ya no está activa.");
         var folioId = stay.FolioId ?? SampleData.Folios.FirstOrDefault(item => item.EstanciaId == estanciaId)?.Id ?? throw new InvalidOperationException("No se encontró el folio.");
         SampleData.Cargos.Add(new CargoModel(SampleData.Cargos.Count == 0 ? 1 : SampleData.Cargos.Max(item => item.Id) + 1, concepto.Trim(), importe, DateTime.Now, stay.HuespedId, stay.Id) { FolioId = folioId });
+    }
+    public void RegistrarCargosPorEstancia(IEnumerable<(string Concepto, decimal Importe)> movimientos, int estanciaId)
+    {
+        var entries = movimientos.ToList();
+        ValidarCargosPorEstancia(entries, estanciaId);
+        var stay = SampleData.Estancias.First(item => item.Id == estanciaId && item.Estado == "Activa");
+        var folioId = stay.FolioId ?? SampleData.Folios.First(item => item.EstanciaId == estanciaId).Id;
+        var nextId = SampleData.Cargos.Count == 0 ? 1 : SampleData.Cargos.Max(item => item.Id) + 1;
+        var now = DateTime.Now;
+        SampleData.Cargos.AddRange(entries.Select((item, index) => new CargoModel(nextId + index, item.Concepto.Trim(), item.Importe, now, stay.HuespedId, stay.Id) { FolioId = folioId }));
+    }
+    public void ValidarCargosPorEstancia(IEnumerable<(string Concepto, decimal Importe)> movimientos, int estanciaId)
+    {
+        if (!NavigationService.Puede("Estancias") && !NavigationService.Puede("Caja y facturación") && !NavigationService.Puede("Consumos") && !NavigationService.Puede("Atención de servicios")) throw new UnauthorizedAccessException("Tu rol no puede agregar cargos a folios.");
+        var entries = movimientos.ToList();
+        if (entries.Any(item => string.IsNullOrWhiteSpace(item.Concepto) || item.Importe <= 0)) throw new InvalidOperationException("Cada movimiento requiere un concepto y un importe positivo.");
+        var stay = SampleData.Estancias.FirstOrDefault(item => item.Id == estanciaId && item.Estado == "Activa") ?? throw new InvalidOperationException("La estancia no está activa.");
+        if (stay.FolioId is null && !SampleData.Folios.Any(item => item.EstanciaId == estanciaId)) throw new InvalidOperationException("No se encontró el folio de la estancia.");
     }
     private static int? ObtenerGuestId(FolioModel folio)
     {
@@ -305,6 +330,7 @@ public sealed class CorreccionFinancieraService
         if (SampleData.Devoluciones.Any(item => item.PagoId == pagoId && item.Estado is "Solicitada" or "Pendiente" && item.Motivo == motivo)) throw new InvalidOperationException("Ya existe una solicitud pendiente con el mismo motivo para este pago.");
         var request = new DevolucionModel(NextId(SampleData.Devoluciones.Select(item => item.Id)), pagoId, monto, motivo.Trim(), "Pendiente") { Solicitada = DateTime.Now, UsuarioSolicitaId = user.Id, Descripcion = descripcion.Trim() };
         SampleData.Devoluciones.Add(request);
+        new NotificacionService().Crear($"Devolución pendiente de revisión · Pago #{pagoId} · Bs {monto:N2}", "Gerente", "Finanzas", "Devolución", request.Id);
         return request;
     }
     public AnulacionModel SolicitarAnulacion(int pagoId, string motivo, string descripcion)
@@ -317,6 +343,7 @@ public sealed class CorreccionFinancieraService
         if (SampleData.Anulaciones.Any(item => item.PagoId == pagoId && item.Estado is "Pendiente" or "Solicitada" or "Autorizada")) throw new InvalidOperationException("Ya existe una solicitud de anulación abierta para este pago.");
         var request = new AnulacionModel(NextId(SampleData.Anulaciones.Select(item => item.Id)), pagoId, motivo.Trim(), "Pendiente") { Solicitada = DateTime.Now, UsuarioSolicitaId = user.Id, Descripcion = descripcion.Trim() };
         SampleData.Anulaciones.Add(request);
+        new NotificacionService().Crear($"Anulación pendiente de revisión · Pago #{pagoId}", "Gerente", "Finanzas", "Anulación", request.Id);
         return request;
     }
     public void AutorizarDevolucion(int id) => ActualizarDevolucion(id, true);

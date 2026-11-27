@@ -29,9 +29,18 @@ public sealed class ReservaModel
     public int Id { get; init; } public string Huesped { get; set; } = ""; public int Habitacion { get; set; }
     public DateTime Llegada { get; set; } public DateTime Salida { get; set; } public string Estado { get; set; } = "Confirmada";
     public string Canal { get; set; } = "Directa"; public string Paquete { get; set; } = "Sin paquete"; public int? GrupoId { get; set; } public int? PromocionId { get; set; }
-    public int Personas { get; set; } = 1;
+    public int Personas { get; set; } = 1; public DateTime? FechaCreacion { get; init; }
+    // Nightly quote snapshot; catalog edits must not rewrite an agreed reservation.
+    public List<PrecioAlojamientoAcordadoModel> AlojamientoNochesAcordadas { get; init; } = [];
 }
 public sealed record CanalReservaModel(int Id, string Nombre, decimal Comision);
+public sealed record CanalReservaResumenModel(int Id, string Nombre, decimal Comision, int Configuraciones);
+public sealed record TarifaConfiguracionModel(int Id, int TarifaId, int TemporadaId, int CanalId, decimal Precio);
+public sealed record PrecioAlojamientoAcordadoModel(int HabitacionId, DateTime Noche, decimal Precio);
+public sealed record ResultadoPrecioNoche(string TipoHabitacion, DateTime Fecha, string Temporada, string Canal, decimal Precio, string Origen, bool EsConfigurado);
+public sealed record CeldaMatrizTarifa(string TipoHabitacion, int TarifaId, string Temporada, int TemporadaId, decimal Precio, string Estado, bool EsConfigurado, int? ConfiguracionId);
+public sealed record FilaMatrizTarifasModel(string TipoHabitacion, int TarifaId, decimal PrecioBase, IReadOnlyList<CeldaMatrizTarifa> Temporadas);
+public sealed record AjusteTarifarioPreviewModel(string Concepto, decimal Antes, decimal Despues);
 public sealed record GrupoReservaModel(int Id, string Nombre, DateTime Creado, DateTime? Llegada = null, DateTime? Salida = null, string Estado = "Activo");
 public sealed record ReservaHabitacionModel(int ReservaHabitacionId, int ReservaId, int HabitacionId);
 public sealed record ReservaHuespedModel(int ReservaId, int HuespedId, bool Principal);
@@ -55,18 +64,34 @@ public sealed record RecursoReservaModel(int Id, int ReservaId, string Nombre, i
 public sealed record SolicitudEspecialModel(int Id, int ReservaId, string Descripcion, string Estado);
 public sealed record TarifaModel(int Id, string TipoHabitacion, string Temporada, decimal Precio, DateTime Desde, DateTime Hasta);
 public sealed record TemporadaModel(int Id, string Nombre, DateTime Desde, DateTime Hasta);
+public sealed record TemporadaResumenModel(int Id, string Nombre, DateTime Desde, DateTime Hasta, string Estado, int Configuraciones);
 public sealed record PaqueteModel(int Id, string Nombre, string Descripcion, decimal Precio, bool Activo);
-public sealed record PromocionModel(int Id, string Nombre, string TipoDescuento, decimal Valor, DateTime Desde, DateTime Hasta);
-public sealed record ConvenioModel(int Id, string Empresa, string Categoria, DateTime VigenciaDesde, DateTime VigenciaHasta, bool Activo);
+public sealed record PaqueteImagenModel(int Id, int PaqueteId, string Url, string Descripcion, bool EsPrincipal, int Orden);
+public sealed record PromocionModel(int Id, string Nombre, string TipoDescuento, decimal Valor, DateTime Desde, DateTime Hasta)
+{ public bool Activa { get; init; } = true; }
+/// <summary>External provider agreement. Service-specific provider terms live in ConvenioServicioModel.</summary>
+public sealed record ConvenioModel(int Id, string Empresa, string Categoria, DateTime VigenciaDesde, DateTime VigenciaHasta, bool Activo,
+    string Nombre = "", string Descripcion = "", string Contacto = "", string Telefono = "", string Email = "", string Direccion = "", string Condiciones = "", string LogoUrl = "");
+/// <summary>Maps to convenio_servicio; never duplicates the hotel service catalog entry.</summary>
+public sealed record ConvenioServicioModel(int ConvenioId, int ServicioId, decimal CostoProveedor, string Observaciones = "", bool Activo = true);
 public sealed record EstanciaModel(int Id, int ReservaId, int HuespedId, DateTime CheckIn, DateTime CheckOut, string Estado)
 { public int? FolioId { get; init; } public DateTime? CheckOutReal { get; init; } }
 public sealed record LlaveModel(int Id, int EstanciaId, string Codigo, string Estado);
 public sealed record FolioModel(int Id, int? EstanciaId, decimal Saldo, string Estado)
 { public int? ReservaId { get; init; } public int? HuespedPrincipalId { get; init; } public string Tipo { get; init; } = "Estancia"; }
 public sealed record CargoDetalleModel(int CargoId, int ConceptoId, int Cantidad, decimal PrecioUnitario);
-public sealed record ReservaServicioModel(int Id, int ReservaId, int HuespedId, int ServicioId, string Estado, bool Incluido) { public int? ServicioAdquiridoId { get; init; } }
+public sealed record ReservaServicioModel(int Id, int ReservaId, int HuespedId, int ServicioId, string Estado, bool Incluido)
+{ public int? EstanciaId { get; init; } public int? ConvenioId { get; init; } public decimal? CostoProveedorAplicado { get; init; } public decimal? PrecioAplicado { get; init; } public decimal? PrecioReferencia { get; init; } public DateTime? FechaUtilizacion { get; init; } public int? CargoId { get; init; } public int? BeneficioId { get; init; } public int? ServicioAdquiridoId { get; init; } public string Observaciones { get; init; } = ""; }
 public sealed record PaqueteServicioModel(int PaqueteId, int ServicioId, string TipoCobertura, int? LimiteUsos, bool Compartido = false);
 public sealed record ServicioProductoModel(int ServicioId, int ProductoId, int CantidadIncluida);
+/// <summary>Maps to empleado_servicio and stores service eligibility independently of appointments.</summary>
+public sealed record EmpleadoServicioModel(int EmpleadoId, int ServicioId, bool Activo = true);
+/// <summary>Maps to servicio_imagen; image ordering is scoped to a service.</summary>
+public sealed record ServicioImagenModel(int Id, int ServicioId, string Url, string Descripcion, bool EsPrincipal, int Orden);
+public sealed record ServicioRevisionModel(int ServicioId, string Servicio, string Categoria, string Estado, IReadOnlyList<string> Problemas);
+public sealed record ServicioProveedorFila(string Proveedor, string Convenio, string Vigencia, decimal Costo, decimal? Margen, string Estado);
+public sealed record ServicioPaqueteFila(string Paquete, string Cobertura, string Limite, string Alcance);
+public sealed record ServicioProductoFila(int ServicioId, int ProductoId, string Producto, string Categoria, int Cantidad, int Existencias);
 public sealed record HabitacionComodidadModel(int HabitacionId, int ComodidadId, bool Disponible);
 public sealed record TurnoCajaModel(int Id, int UsuarioId, DateTime Apertura, decimal MontoInicial, string Estado)
 { public DateTime? Cierre { get; init; } public decimal? EfectivoContado { get; init; } public int? CierreCajaId { get; init; } public string ObservacionesCierre { get; init; } = ""; }
@@ -96,9 +121,11 @@ public sealed record SolicitudServicioModel(int Id, int HuespedId, int ServicioI
     public string OrigenTraslado { get; init; } = ""; public string DestinoTraslado { get; init; } = ""; public int? Pasajeros { get; init; }
     public string ContactoTraslado { get; init; } = ""; public bool ProcesamientoCompleto { get; init; }
     public int? UsoServicioId { get; init; } public int? CargoId { get; init; } public string CoberturaEstimada { get; init; } = "";
+    // Provider assignment is intentionally deferred until Operations coordinates the service.
+    public int? ConvenioId { get; init; } public decimal? CostoProveedorAplicado { get; init; }
 }
 public sealed record UsoServicioModel(int Id, int HuespedId, int ServicioId, DateTime Fecha, bool Incluido, decimal Cargo, string Estado)
-{ public int? EstanciaId { get; init; } public int? ServicioAdquiridoId { get; init; } }
+{ public int? EstanciaId { get; init; } public int? ServicioAdquiridoId { get; init; } public int? ConvenioId { get; init; } public decimal? CostoProveedorAplicado { get; init; } public decimal? PrecioAplicado { get; init; } public string Cobertura { get; init; } = "Adicional"; }
 public sealed record TrasladoModel(int Id, int HuespedId, string Origen, string Destino, DateTime Salida, string Estado)
 { public int? EstanciaId { get; init; } public int? ServicioId { get; init; } public int? SolicitudId { get; init; } public int Pasajeros { get; init; } = 1; public string Observaciones { get; init; } = ""; }
 public sealed class CargoModel(int id, string concepto, decimal monto, DateTime fecha, int huespedId = 0, int? estanciaId = null)
@@ -106,10 +133,11 @@ public sealed class CargoModel(int id, string concepto, decimal monto, DateTime 
 public sealed class ServicioModel
 {
     public int Id { get; init; } public string Nombre { get; set; } = ""; public string Categoria { get; set; } = "";
-    public decimal Precio { get; set; } public bool RequiereCita { get; set; } public string Cobertura { get; set; } = "No incluido";
-    public int? UsosRestantes { get; set; } public int? PadreId { get; set; } public bool Activo { get; set; } = true; public bool Reservable { get; set; } = true; public bool Disponible { get; set; } = true; public int DuracionMinutos { get; set; } = 60;
-    public string Descripcion { get; set; } = ""; public string Proveedor { get; set; } = "Interno"; public int? ProductoAsociadoId { get; set; }
-    public bool RequiereTraslado { get; set; } public string Condiciones { get; set; } = "";
+    public decimal Precio { get; set; } public bool RequiereCita { get; set; }
+    public int? PadreId { get; set; } public bool Activo { get; set; } = true; public bool Reservable { get; set; } = true; public int DuracionMinutos { get; set; } = 60;
+    public string Descripcion { get; set; } = "";
+    // Prototype-only operational rule; the supplied servicio table has no transfer-specific column.
+    public bool RequiereTraslado { get; set; }
 }
 public sealed class ProductoModel
 {
@@ -117,7 +145,7 @@ public sealed class ProductoModel
     public decimal Precio { get; set; } public int Stock { get; set; } public int StockMinimo { get; set; } = 8; public bool IncluidoEnPaquete { get; set; }
 }
 public sealed record ConsumoModel(int Id, int HuespedId, int ProductoId, int Cantidad, DateTime Fecha, bool Incluido)
-{ public int? EstanciaId { get; init; } }
+{ public int? EstanciaId { get; init; } public decimal? PrecioUnitarioAcordado { get; init; } public int? CargoId { get; init; } public string Origen { get; init; } = ""; }
 public sealed record MovimientoInventarioModel(int Id, int ProductoId, DateTime Fecha, string Tipo, int Cantidad, string Motivo);
 public sealed class TareaModel
 {
@@ -144,6 +172,7 @@ public sealed record MovimientoModel(DateTime Fecha, string Tipo, string Concept
 public sealed record CajaModel(int Id, string Estado, decimal Apertura, DateTime FechaApertura);
 public sealed record CierreCajaModel(int Id, DateTime Fecha, decimal Esperado, decimal Contado, decimal Diferencia, string Observaciones)
 { public int TurnoCajaId { get; init; } public int UsuarioId { get; init; } public DateTime Apertura { get; init; } public decimal AperturaMonto { get; init; } public decimal EfectivoCobros { get; init; } public decimal EfectivoDevoluciones { get; init; } public decimal NoEfectivo { get; init; } }
-public sealed record NotificacionModel(int Id, string Mensaje, string Destino, DateTime Fecha, bool Leida);
+public sealed record NotificacionModel(int Id, string Mensaje, string Destino, DateTime Fecha, bool Leida)
+{ public string ModuloDestino { get; init; } = ""; public string TipoRegistroDestino { get; init; } = ""; public int? RegistroDestinoId { get; init; } }
 public sealed record ReporteModel(int Id, string Nombre, string Categoria, DateTime Generado, string Estado);
 public sealed record AuditoriaModel(DateTime Fecha, string Usuario, string Cambio, string Antes, string Despues);

@@ -50,13 +50,12 @@ public partial class ReservaDialog : Window
         StayStep.GuestCount.Text = Math.Max(1, _borrador.Personas).ToString();
         StayStep.Arrival.SelectedDate = existente?.Llegada.Date ?? _borrador.Llegada.Date;
         StayStep.Departure.SelectedDate = existente?.Salida.Date ?? _borrador.Salida.Date;
-        StayStep.Channel.ItemsSource = new[] { "Directa", "Agencia", "Teléfono", "Sitio web" };
+        StayStep.Channel.ItemsSource = SampleData.CanalesReserva.Select(item=>item.Nombre).ToList();
         StayStep.Channel.SelectedItem = _borrador.Canal;
         ExtrasStep.Paquete.ItemsSource = new[] { "Sin paquete" }.Concat(SampleData.Paquetes.Where(item => item.Activo).Select(item => item.Nombre)).ToList();
         ExtrasStep.Paquete.SelectedItem = SampleData.Paquetes.FirstOrDefault(item => item.Id == _borrador.PaqueteId)?.Nombre ?? "Sin paquete";
         ExtrasStep.CantidadPaquete.SelectedItem = Math.Clamp(_borrador.CantidadPaquete, 1, 5);
-        ExtrasStep.Promocion.ItemsSource = SampleData.Promociones.Where(item => item.Hasta.Date >= DateTime.Today).ToList();
-        ExtrasStep.Promocion.SelectedItem = SampleData.Promociones.FirstOrDefault(item => item.Id == _borrador.PromocionId);
+        ActualizarPromocionesElegibles(_borrador.PromocionId);
         ExtrasStep.Solicitud.Text = _borrador.SolicitudesEspeciales;
 
         var selectedGuests = SelectedGuests();
@@ -65,8 +64,8 @@ public partial class ReservaDialog : Window
         ExtrasStep.Recursos.DraftChanged += (_, _) => ActualizarResumen();
         ExtrasStep.ServiciosAdquiridos.DraftChanged += (_, _) => ActualizarResumen();
 
-        StayStep.Arrival.SelectedDateChanged += (_, _) => { if (IsLoaded) { CargarHabitaciones(RoomsStep.HabitacionesSeleccionadas); ActualizarAdicionalesPorFechas(); ActualizarResumen(); } };
-        StayStep.Departure.SelectedDateChanged += (_, _) => { if (IsLoaded) { CargarHabitaciones(RoomsStep.HabitacionesSeleccionadas); ActualizarAdicionalesPorFechas(); ActualizarResumen(); } };
+        StayStep.Arrival.SelectedDateChanged += (_, _) => { if (IsLoaded) { CargarHabitaciones(RoomsStep.HabitacionesSeleccionadas); ActualizarAdicionalesPorFechas(); ActualizarPromocionesElegibles(_borrador.PromocionId); ActualizarResumen(); } };
+        StayStep.Departure.SelectedDateChanged += (_, _) => { if (IsLoaded) { CargarHabitaciones(RoomsStep.HabitacionesSeleccionadas); ActualizarAdicionalesPorFechas(); ActualizarPromocionesElegibles(_borrador.PromocionId); ActualizarResumen(); } };
         RoomsStep.SeleccionCambiada += ActualizarResumen;
         StayStep.GuestCount.TextChanged += (_, _) => { if (IsLoaded) ActualizarResumen(); };
         GuestsStep.HuespedPrincipal.SelectionChanged += (_, _) => { GuestsStep.RefrescarListadoAcompanantes(); RefreshServiceCoverage(); ActualizarResumen(); };
@@ -88,6 +87,13 @@ public partial class ReservaDialog : Window
 
     private DateTime FechaEntrada => StayStep.Arrival.SelectedDate ?? DateTime.Today.AddDays(1);
     private DateTime FechaSalida => StayStep.Departure.SelectedDate ?? FechaEntrada.AddDays(1);
+    private void ActualizarPromocionesElegibles(int? selectedId)
+    {
+        var eligible = SampleData.Promociones.Where(item => item.Activa && item.Desde.Date <= FechaEntrada.Date && item.Hasta.Date >= FechaEntrada.Date).ToList();
+        ExtrasStep.Promocion.ItemsSource = eligible;
+        ExtrasStep.Promocion.SelectedItem = eligible.FirstOrDefault(item => item.Id == selectedId);
+        if (ExtrasStep.Promocion.SelectedItem is null) _borrador.PromocionId = null;
+    }
     private IReadOnlyList<HuespedModel> SelectedGuests()
     {
         var selected = new List<HuespedModel>();

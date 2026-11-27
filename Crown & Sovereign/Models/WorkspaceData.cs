@@ -8,10 +8,25 @@ public sealed class LostObjectRow
 { public int Id { get; set; } public string Descripcion { get; set; }=""; public string Habitacion { get; set; }=""; public DateTime Encontrado { get; set; } public string Estado { get; set; }=""; public string Observaciones { get; set; }=""; }
 public sealed class AuditRow
 { public DateTime Fecha { get; set; } public string Usuario { get; set; }=""; public string Cambio { get; set; }=""; public string Antes { get; set; }=""; public string Despues { get; set; }=""; }
-public sealed record StayDirectoryEntry(int Id, int ReservationId, string Guest, string Room, int Floor, string Package, DateTime CheckIn, DateTime CheckOut, string Status, int GuestId = 0, DateTime? CheckOutReal = null);
+public sealed record StayDirectoryEntry(int Id, int ReservationId, string Guest, string Room, int Floor, string Package, DateTime CheckIn, DateTime CheckOut, string Status, int GuestId = 0, DateTime? CheckOutReal = null)
+{
+    public string RoomType { get; init; } = "";
+    public string Floors { get; init; } = "";
+    public string GuestDocument { get; init; } = "";
+    public string Group { get; init; } = "";
+    public decimal Balance { get; init; }
+    public bool AttentionRequired { get; init; }
+}
+public sealed record StayDirectoryMetrics(int Active, int DeparturesToday, int AttentionRequired, int WithBalance);
+public sealed record StayExtensionQuote(int StayId, int ReservationId, DateTime CurrentDeparture, DateTime NewDeparture, int AdditionalNights, IReadOnlyList<string> Rooms, decimal Lodging, decimal Resources, decimal Total);
+public sealed record StayResourceRow(int RecursoId, string Nombre, int Cantidad, string Modalidad, decimal Importe, string Estado, string Observaciones, int? CargoId, string EstadoRaw);
 public sealed record StayActivityRow(DateTime Fecha, string Tipo, string Descripcion, string Usuario);
 public sealed record StayServiceRequestRow(DateTime Fecha, string Tipo, string Servicio, string Detalle, string Estado);
-public sealed record FolioLine(DateTime Fecha, string Tipo, string Concepto, decimal Importe);
+public sealed record FolioLine(DateTime Fecha, string Tipo, string Concepto, decimal Importe)
+{
+    public string Origen { get; init; } = "";
+    public string Estado { get; init; } = "Aplicado";
+}
 public sealed record CashDeskSummary(bool Abierta, decimal Apertura, decimal Efectivo, decimal NoEfectivo, decimal Devoluciones, decimal Esperado);
 public sealed record CashDeskShiftSummary(TurnoCajaModel Turno, decimal EfectivoCobros, decimal EfectivoDevoluciones, decimal NoEfectivo, decimal TotalPagos, decimal EfectivoEsperado, IReadOnlyList<MetodoPagoResumen> PorMetodo);
 public sealed record MetodoPagoResumen(string Metodo, decimal Importe, bool EsEfectivo);

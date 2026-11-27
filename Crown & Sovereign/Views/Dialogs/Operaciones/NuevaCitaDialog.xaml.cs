@@ -11,8 +11,15 @@ public partial class NuevaCitaDialog : Window
     private readonly HuespedService _guests=new();
     public NuevaCitaDialog()
     {
-        InitializeComponent();GuestBox.ItemsSource=_guests.ListarActivos();ServiceBox.ItemsSource=SampleData.Servicios.Where(item=>item.Activo&&item.RequiereCita&&item.Reservable).ToList();EmployeePicker.ItemsSource=SampleData.Empleados.Where(item=>item.Cargo=="Servicios").ToList();
+        InitializeComponent();GuestBox.ItemsSource=_guests.ListarActivos();ServiceBox.ItemsSource=SampleData.Servicios.Where(item=>item.Activo&&item.RequiereCita&&item.Reservable).ToList();
         GuestBox.SelectedIndex=-1;ServiceBox.SelectedIndex=-1;EmployeePicker.SelectedIndex=-1;DatePicker.SelectedDate=DateTime.Today.AddDays(1);TimePicker.ItemsSource=Enumerable.Range(8,12).Select(hour=>$"{hour:00}:00").ToList();TimePicker.SelectedIndex=-1;
+    }
+    private void Service_Changed(object sender,SelectionChangedEventArgs e)
+    {
+        if(ServiceBox.SelectedItem is not ServicioModel service){EmployeePicker.ItemsSource=null;EmployeeHint.Text="Elige un servicio para ver responsables.";return;}
+        var linked=SampleData.EmpleadosServicios.Where(item=>item.ServicioId==service.Id&&item.Activo).Select(item=>item.EmpleadoId).ToHashSet();
+        EmployeePicker.ItemsSource=SampleData.Empleados.Where(item=>linked.Count==0?item.Cargo=="Servicios":linked.Contains(item.Id)).OrderBy(item=>item.Nombre).ToList();EmployeePicker.SelectedIndex=-1;
+        EmployeeHint.Text=linked.Count==0?"Sin empleados asociados; se muestran colaboradores de servicios. Revisa la configuración.":"Solo aparecen empleados asociados al servicio.";
     }
     private void Guest_Changed(object sender,SelectionChangedEventArgs e)
     {
