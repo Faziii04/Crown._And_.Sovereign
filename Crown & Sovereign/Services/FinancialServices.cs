@@ -82,13 +82,15 @@ public sealed class CajaService
         if (!NavigationService.Puede("Caja y facturación")) throw new UnauthorizedAccessException("Tu rol no puede abrir caja.");
         if (ObtenerTurnoActual(user.Id) is not null) throw new InvalidOperationException("Ya tienes un turno de caja abierto.");
         if (apertura < 0 || decimal.Round(apertura, 2) != apertura) throw new InvalidOperationException("El fondo inicial debe ser un importe válido y no negativo.");
-        var shift = new TurnoCajaModel(SampleData.TurnosCaja.Count == 0 ? 1 : SampleData.TurnosCaja.Max(item => item.Id) + 1, user.Id, DateTime.Now, apertura, "Abierto")
+        var shift = new TurnoCajaModel(Persistencia.SiguienteId("turno_caja", "turno_id", () => SampleData.TurnosCaja.Count == 0 ? 1 : SampleData.TurnosCaja.Max(item => item.Id) + 1), user.Id, DateTime.Now, apertura, "Abierto")
         { ObservacionesCierre = observaciones.Trim() };
+        var openingMovement = new MovimientoCajaModel(Persistencia.SiguienteId("movimiento_caja", "movimiento_id", () => SampleData.MovimientosCaja.Count + 1), shift.Id, shift.Apertura, "Apertura", apertura, observaciones.Trim()) { Metodo = "Efectivo", UsuarioId = user.Id };
+        CajaRepositorio.AbrirTurno(shift, openingMovement);
         SampleData.TurnosCaja.Add(shift);
-        SampleData.MovimientosCaja.Add(new(SampleData.MovimientosCaja.Count + 1, shift.Id, shift.Apertura, "Apertura", apertura, observaciones.Trim()) { Metodo = "Efectivo", UsuarioId = user.Id });
+        SampleData.MovimientosCaja.Add(openingMovement);
         SampleData.AperturaCaja = apertura;
         SampleData.CajaAbierta = true;
-        SampleData.Auditoria.Insert(0, new(DateTime.Now, user.Usuario, "Apertura de caja", "Cerrada", $"Turno #{shift.Id} · Bs {apertura:N2}"));
+        AuditoriaRepositorio.Registrar(new(DateTime.Now, user.Usuario, "Apertura de caja", "Cerrada", $"Turno #{shift.Id} · Bs {apertura:N2}"));
         return shift;
     }
 
@@ -104,17 +106,18 @@ public sealed class CajaService
         if (esperadoRevisado is decimal viewed && viewed != summary.EfectivoEsperado) throw new InvalidOperationException("Se registraron movimientos después de abrir el cierre. Revisa el nuevo total antes de confirmar.");
         var difference = contado - summary.EfectivoEsperado;
         if (difference != 0 && string.IsNullOrWhiteSpace(observaciones)) throw new InvalidOperationException("Describe la diferencia antes de cerrar el turno.");
-        var closureId = SampleData.CierresCaja.Count == 0 ? 1 : SampleData.CierresCaja.Max(item => item.Id) + 1;
+        var closureId = Persistencia.SiguienteId("cierre_caja", "cierre_id", () => SampleData.CierresCaja.Count == 0 ? 1 : SampleData.CierresCaja.Max(item => item.Id) + 1);
         var closure = new CierreCajaModel(closureId, DateTime.Now, summary.EfectivoEsperado, contado, difference, observaciones.Trim())
         {
             TurnoCajaId = turnoId, UsuarioId = user.Id, Apertura = shift.Apertura, AperturaMonto = shift.MontoInicial,
             EfectivoCobros = summary.EfectivoCobros, EfectivoDevoluciones = summary.EfectivoDevoluciones, NoEfectivo = summary.NoEfectivo
         };
+        CajaRepositorio.CerrarTurno(closure);
         var index = SampleData.TurnosCaja.FindIndex(item => item.Id == turnoId);
         SampleData.CierresCaja.Add(closure);
         SampleData.TurnosCaja[index] = shift with { Estado = "Cerrado", Cierre = closure.Fecha, EfectivoContado = contado, CierreCajaId = closure.Id, ObservacionesCierre = observaciones.Trim() };
         SampleData.CajaAbierta = SampleData.TurnosCaja.Any(item => item.Estado == "Abierto");
-        SampleData.Auditoria.Insert(0, new(DateTime.Now, user.Usuario, "Cierre de caja", $"Turno #{turnoId} · esperado Bs {closure.Esperado:N2}", $"Contado Bs {contado:N2} · diferencia Bs {difference:N2}"));
+        AuditoriaRepositorio.Registrar(new(DateTime.Now, user.Usuario, "Cierre de caja", $"Turno #{turnoId} · esperado Bs {closure.Esperado:N2}", $"Contado Bs {contado:N2} · diferencia Bs {difference:N2}"));
         return closure;
     }
 }
@@ -188,7 +191,9 @@ public sealed class FolioService
         if (importe <= 0 || string.IsNullOrWhiteSpace(concepto)) throw new InvalidOperationException("Indica un concepto y un importe positivo.");
         var stay = SampleData.Estancias.FirstOrDefault(item => item.Id == estanciaId && item.Estado == "Activa") ?? throw new InvalidOperationException("La estancia ya no está activa.");
         var folioId = stay.FolioId ?? SampleData.Folios.FirstOrDefault(item => item.EstanciaId == estanciaId)?.Id ?? throw new InvalidOperationException("No se encontró el folio.");
-        SampleData.Cargos.Add(new CargoModel(SampleData.Cargos.Count == 0 ? 1 : SampleData.Cargos.Max(item => item.Id) + 1, concepto.Trim(), importe, DateTime.Now, stay.HuespedId, stay.Id) { FolioId = folioId });
+        var cargo = new CargoModel(Persistencia.SiguienteId("cargo", "cargo_id", () => SampleData.Cargos.Count == 0 ? 1 : SampleData.Cargos.Max(item => item.Id) + 1), concepto.Trim(), importe, DateTime.Now, stay.HuespedId, stay.Id) { FolioId = folioId };
+        FolioRepositorio.InsertarCargo(cargo);
+        SampleData.Cargos.Add(cargo);
     }
     private static int? ObtenerGuestId(FolioModel folio)
     {
@@ -266,18 +271,29 @@ public sealed class PagoService
 
         var guestId = folio.HuespedPrincipalId ?? (folio.EstanciaId is int stayId ? SampleData.Estancias.FirstOrDefault(item => item.Id == stayId)?.HuespedId : null) ?? (folio.ReservaId is int reservationId ? SampleData.ReservaHuespedes.FirstOrDefault(item => item.ReservaId == reservationId && item.Principal)?.HuespedId : null) ?? 0;
         var created = new List<PagoModel>();
+        var cashMovements = new List<MovimientoCajaModel>();
         foreach (var (part, method) in selectedMethods)
         {
-            var paymentId = SampleData.Pagos.Count == 0 ? 1 : SampleData.Pagos.Max(item => item.Id) + 1;
+            var paymentId = Persistencia.SiguienteId("pago", "pago_id", () => SampleData.Pagos.Count == 0 ? 1 : SampleData.Pagos.Max(item => item.Id) + 1);
             var payment = new PagoModel(paymentId, folioId, part.Monto, method!.Nombre, DateTime.Now, "Aplicado")
             { TurnoCajaId = shift.Id, UsuarioId = user.Id, Referencia = referencia.Trim(), Concepto = folio.Tipo == "Reserva" ? "Anticipo de reserva" : "Pago de folio", EsAnticipo = folio.Tipo == "Reserva" };
             SampleData.Pagos.Add(payment);
-            SampleData.MovimientosCaja.Add(new(SampleData.MovimientosCaja.Count == 0 ? 1 : SampleData.MovimientosCaja.Max(item => item.Id) + 1, shift.Id, payment.Fecha, "Cobro", payment.Monto, payment.Concepto)
-            { PagoId = payment.Id, FolioId = folioId, Metodo = method.Nombre, UsuarioId = user.Id });
+            var cashMovement = new MovimientoCajaModel(Persistencia.SiguienteId("movimiento_caja", "movimiento_id", () => SampleData.MovimientosCaja.Count == 0 ? 1 : SampleData.MovimientosCaja.Max(item => item.Id) + 1), shift.Id, payment.Fecha, "Cobro", payment.Monto, payment.Concepto)
+            { PagoId = payment.Id, FolioId = folioId, Metodo = method.Nombre, UsuarioId = user.Id };
+            SampleData.MovimientosCaja.Add(cashMovement);
+            cashMovements.Add(cashMovement);
             var stay = folio.EstanciaId is int stayKey ? SampleData.Estancias.FirstOrDefault(item => item.Id == stayKey) : null;
             SampleData.Movimientos.Insert(0, new(payment.Fecha, "Pago", payment.Concepto, payment.Monto, payment.Metodo, guestId)
             { EstanciaId = folio.EstanciaId, TurnoCajaId = shift.Id, PagoId = payment.Id, FolioId = folioId });
             created.Add(payment);
+        }
+        try { CajaRepositorio.RegistrarPagos(created, cashMovements, folioId); }
+        catch (Exception ex)
+        {
+            // No se guardó nada: se retira de pantalla lo que se acababa de registrar.
+            foreach (var payment in created) { SampleData.Pagos.Remove(payment); SampleData.Movimientos.RemoveAll(item => item.PagoId == payment.Id); }
+            foreach (var movement in cashMovements) SampleData.MovimientosCaja.Remove(movement);
+            throw new InvalidOperationException("No se pudo registrar el pago en la base de datos. " + ex.Message, ex);
         }
         UpdateFolioBalance(folioId);
         return created;
@@ -303,7 +319,8 @@ public sealed class CorreccionFinancieraService
         var reserved = SampleData.Devoluciones.Where(item => item.PagoId == pagoId && item.Estado is "Solicitada" or "Pendiente" or "Autorizada" or "Ejecutada").Sum(item => item.Monto);
         if (monto + reserved > payment.Monto) throw new InvalidOperationException("El importe solicitado supera el saldo disponible para devolver.");
         if (SampleData.Devoluciones.Any(item => item.PagoId == pagoId && item.Estado is "Solicitada" or "Pendiente" && item.Motivo == motivo)) throw new InvalidOperationException("Ya existe una solicitud pendiente con el mismo motivo para este pago.");
-        var request = new DevolucionModel(NextId(SampleData.Devoluciones.Select(item => item.Id)), pagoId, monto, motivo.Trim(), "Pendiente") { Solicitada = DateTime.Now, UsuarioSolicitaId = user.Id, Descripcion = descripcion.Trim() };
+        var request = new DevolucionModel(Persistencia.SiguienteId("devolucion", "devolucion_id", () => NextId(SampleData.Devoluciones.Select(item => item.Id))), pagoId, monto, motivo.Trim(), "Pendiente") { Solicitada = DateTime.Now, UsuarioSolicitaId = user.Id, Descripcion = descripcion.Trim() };
+        CajaRepositorio.InsertarDevolucion(request);
         SampleData.Devoluciones.Add(request);
         return request;
     }
@@ -315,7 +332,8 @@ public sealed class CorreccionFinancieraService
         if (payment.Estado == "Anulado" || SampleData.Devoluciones.Any(item => item.PagoId == pagoId && item.Estado is "Ejecutada" or "Autorizada")) throw new InvalidOperationException("El pago tiene una corrección incompatible o ya fue anulado.");
         if (string.IsNullOrWhiteSpace(motivo)) throw new InvalidOperationException("Indica un motivo para solicitar la anulación.");
         if (SampleData.Anulaciones.Any(item => item.PagoId == pagoId && item.Estado is "Pendiente" or "Solicitada" or "Autorizada")) throw new InvalidOperationException("Ya existe una solicitud de anulación abierta para este pago.");
-        var request = new AnulacionModel(NextId(SampleData.Anulaciones.Select(item => item.Id)), pagoId, motivo.Trim(), "Pendiente") { Solicitada = DateTime.Now, UsuarioSolicitaId = user.Id, Descripcion = descripcion.Trim() };
+        var request = new AnulacionModel(Persistencia.SiguienteId("anulacion", "anulacion_id", () => NextId(SampleData.Anulaciones.Select(item => item.Id))), pagoId, motivo.Trim(), "Pendiente") { Solicitada = DateTime.Now, UsuarioSolicitaId = user.Id, Descripcion = descripcion.Trim() };
+        CajaRepositorio.InsertarAnulacion(request);
         SampleData.Anulaciones.Add(request);
         return request;
     }
@@ -357,9 +375,11 @@ public sealed class CorreccionFinancieraService
         var alreadyRefunded = SampleData.Devoluciones.Where(item => item.PagoId == payment.Id && item.Estado == "Ejecutada").Sum(item => item.Monto);
         if (alreadyRefunded + request.Monto > payment.Monto || payment.Estado == "Anulado") throw new InvalidOperationException("El pago ya no admite esta devolución.");
         var updated = request with { Estado = "Ejecutada", Ejecutada = DateTime.Now, TurnoEjecucionId = shift.Id, MetodoEjecucion = payment.Metodo, Descripcion = string.IsNullOrWhiteSpace(observaciones) ? request.Descripcion : $"{request.Descripcion} · Ejecución: {observaciones.Trim()}" };
+        var refundMovement = new MovimientoCajaModel(Persistencia.SiguienteId("movimiento_caja", "movimiento_id", () => NextId(SampleData.MovimientosCaja.Select(item => item.Id))), shift.Id, updated.Ejecutada.Value, "Devolución", updated.Monto, updated.Motivo)
+        { PagoId = payment.Id, FolioId = payment.FolioId, Metodo = payment.Metodo, UsuarioId = user.Id, CorreccionId = updated.Id };
+        CajaRepositorio.EjecutarDevolucion(updated, refundMovement, alreadyRefunded + updated.Monto >= payment.Monto ? "Devuelto" : "Parcialmente devuelto", user.Id);
         SampleData.Devoluciones[index] = updated;
-        SampleData.MovimientosCaja.Add(new(NextId(SampleData.MovimientosCaja.Select(item => item.Id)), shift.Id, updated.Ejecutada.Value, "Devolución", updated.Monto, updated.Motivo)
-        { PagoId = payment.Id, FolioId = payment.FolioId, Metodo = payment.Metodo, UsuarioId = user.Id, CorreccionId = updated.Id });
+        SampleData.MovimientosCaja.Add(refundMovement);
         var refunded = SampleData.Devoluciones.Where(item => item.PagoId == payment.Id && item.Estado == "Ejecutada").Sum(item => item.Monto);
         var paymentIndex = SampleData.Pagos.FindIndex(item => item.Id == payment.Id);
         SampleData.Pagos[paymentIndex] = payment with { Estado = refunded >= payment.Monto ? "Devuelto" : "Parcialmente devuelto" };
@@ -378,11 +398,13 @@ public sealed class CorreccionFinancieraService
         var payment = new PagoService().Obtener(request.PagoId);
         if (payment.Estado == "Anulado" || SampleData.Devoluciones.Any(item => item.PagoId == payment.Id && item.Estado == "Ejecutada")) throw new InvalidOperationException("El pago ya tiene una corrección ejecutada.");
         var updated = request with { Estado = "Ejecutada", Ejecutada = DateTime.Now, TurnoEjecucionId = shift.Id, Descripcion = string.IsNullOrWhiteSpace(observaciones) ? request.Descripcion : $"{request.Descripcion} · Ejecución: {observaciones.Trim()}" };
+        var voidMovement = new MovimientoCajaModel(Persistencia.SiguienteId("movimiento_caja", "movimiento_id", () => NextId(SampleData.MovimientosCaja.Select(item => item.Id))), shift.Id, updated.Ejecutada.Value, "Anulación", payment.Monto, updated.Motivo)
+        { PagoId = payment.Id, FolioId = payment.FolioId, Metodo = payment.Metodo, UsuarioId = user.Id, CorreccionId = updated.Id };
+        CajaRepositorio.EjecutarAnulacion(updated, voidMovement, user.Id);
         SampleData.Anulaciones[index] = updated;
         var paymentIndex = SampleData.Pagos.FindIndex(item => item.Id == payment.Id);
         SampleData.Pagos[paymentIndex] = payment with { Estado = "Anulado" };
-        SampleData.MovimientosCaja.Add(new(NextId(SampleData.MovimientosCaja.Select(item => item.Id)), shift.Id, updated.Ejecutada.Value, "Anulación", payment.Monto, updated.Motivo)
-        { PagoId = payment.Id, FolioId = payment.FolioId, Metodo = payment.Metodo, UsuarioId = user.Id, CorreccionId = updated.Id });
+        SampleData.MovimientosCaja.Add(voidMovement);
         SampleData.Movimientos.Insert(0, new(updated.Ejecutada.Value, "Anulación", updated.Motivo, payment.Monto, payment.Metodo, GuestFor(payment.FolioId)) { TurnoCajaId = shift.Id, PagoId = payment.Id, FolioId = payment.FolioId });
         return updated;
     }
@@ -395,7 +417,9 @@ public sealed class CorreccionFinancieraService
         var request = SampleData.Devoluciones[index];
         if (request.Estado != "Pendiente") throw new InvalidOperationException("La solicitud ya fue revisada.");
         if (request.UsuarioSolicitaId == user.Id) throw new UnauthorizedAccessException("No puedes autorizar una solicitud que tú mismo presentaste.");
-        SampleData.Devoluciones[index] = request with { Estado = approve ? "Autorizada" : "Rechazada", UsuarioAutorizaId = user.Id, FechaAutorizacion = DateTime.Now };
+        var reviewed = request with { Estado = approve ? "Autorizada" : "Rechazada", UsuarioAutorizaId = user.Id, FechaAutorizacion = DateTime.Now };
+        CajaRepositorio.RevisarCorreccion("devolucion", id, reviewed.Estado, user.Id, reviewed.FechaAutorizacion!.Value);
+        SampleData.Devoluciones[index] = reviewed;
     }
     private static void ActualizarAnulacion(int id, bool approve)
     {
@@ -406,7 +430,9 @@ public sealed class CorreccionFinancieraService
         var request = SampleData.Anulaciones[index];
         if (request.Estado != "Pendiente") throw new InvalidOperationException("La solicitud ya fue revisada.");
         if (request.UsuarioSolicitaId == user.Id) throw new UnauthorizedAccessException("No puedes autorizar una solicitud que tú mismo presentaste.");
-        SampleData.Anulaciones[index] = request with { Estado = approve ? "Autorizada" : "Rechazada", UsuarioAutorizaId = user.Id, FechaAutorizacion = DateTime.Now };
+        var reviewed = request with { Estado = approve ? "Autorizada" : "Rechazada", UsuarioAutorizaId = user.Id, FechaAutorizacion = DateTime.Now };
+        CajaRepositorio.RevisarCorreccion("anulacion", id, reviewed.Estado, user.Id, reviewed.FechaAutorizacion!.Value);
+        SampleData.Anulaciones[index] = reviewed;
     }
     private static int GuestFor(int folioId)
     {
@@ -445,7 +471,7 @@ public sealed class FacturaService
         var current = Preparar(draft.FolioId, draft.Cliente, draft.Documento);
         if (!current.Lineas.Select(item => item.CargoId).SequenceEqual(draft.Lineas.Select(item => item.CargoId)) || current.Total != draft.Total) throw new InvalidOperationException("Los cargos del folio cambiaron. Revisa la factura antes de emitirla.");
         if (current.Lineas.Any(line => SampleData.Facturas.SelectMany(item => item.Lineas).Any(existing => existing.CargoId == line.CargoId))) throw new InvalidOperationException("Uno o más cargos ya fueron facturados.");
-        var invoiceId = SampleData.Facturas.Count == 0 ? 1 : SampleData.Facturas.Max(item => item.Id) + 1;
+        var invoiceId = Persistencia.SiguienteId("factura", "factura_id", () => SampleData.Facturas.Count == 0 ? 1 : SampleData.Facturas.Max(item => item.Id) + 1);
         var year = DateTime.Today.Year;
         var sequence = SampleData.Facturas.Count(item => item.Numero.StartsWith($"FAC-{year}-", StringComparison.OrdinalIgnoreCase)) + 1;
         var folio = SampleData.Folios.First(item => item.Id == draft.FolioId);
@@ -458,6 +484,7 @@ public sealed class FacturaService
             Cliente = current.Cliente, DocumentoCliente = current.Documento, Lineas = current.Lineas,
             UsuarioEmiteId = user.Id, ReservaId = reservationId, EstanciaId = stay?.Id, HabitacionId = roomId
         };
+        CajaRepositorio.InsertarFactura(invoice);
         SampleData.Facturas.Add(invoice);
         return invoice;
     }

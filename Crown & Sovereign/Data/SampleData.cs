@@ -22,7 +22,7 @@ public static class SampleData
     public static readonly List<UsoServicioModel> UsosServicio = [];
     public static readonly List<TrasladoModel> Traslados = [];
     public static readonly List<ObjetoOlvidadoModel> ObjetosOlvidados = [];
-    public static readonly string[] Tipos = ["Estándar", "Doble", "Superior", "Junior suite", "Suite"];
+    public static string[] Tipos { get; internal set; } = ["Estándar", "Doble", "Superior", "Junior suite", "Suite"];
     public static readonly List<HabitacionModel> Habitaciones = [];
     public static readonly List<HuespedModel> Huespedes = [];
     public static readonly List<ReservaModel> Reservas = [];
@@ -76,7 +76,16 @@ public static class SampleData
     {
         ["Nombre"]="Crown & Sovereign",["Dirección"]="Av. Arce · La Paz",["Categoría"]="5 estrellas",["Teléfono"]="+591 2 200 0000",["Correo"]="reservas@crownhotel.bo"
     };
-    static SampleData() => Inicializar();
+    /// <summary>Motivo por el que no se pudo cargar la base; null si todo salió bien o se usa la demostración.</summary>
+    public static string? ErrorCarga { get; private set; }
+
+    // Con appsettings.json se trabaja con la base; sin él, con los datos de demostración.
+    static SampleData()
+    {
+        if (!DatabaseConnection.Configurada) { Inicializar(); return; }
+        try { CargadorBaseDatos.Cargar(); }
+        catch (Exception ex) { ErrorCarga = ex.Message; }
+    }
     private static void Inicializar()
     {
         var random = new Random(2026); var nombres = new[] { "Camila", "Mateo", "Valentina", "Santiago", "Isabella", "Gabriel", "Lucía", "Nicolás", "Sofía", "Tomás", "Mariana", "Joaquín" };

@@ -7,8 +7,9 @@ public sealed class DashboardService
 {
     public IReadOnlyList<DashboardMetric> Recepcion()
     {
-        var arrivals = SampleData.Reservas.Count(r => r.Estado != "Cancelada" && r.Llegada.Date == DateTime.Today);
-        var departures = SampleData.Reservas.Count(r => r.Estado != "Cancelada" && r.Salida.Date == DateTime.Today);
+        // Llegan las reservas que aún no hicieron el check-in; salen las que están alojadas.
+        var arrivals = SampleData.Reservas.Count(r => (r.Estado is "Confirmada" or "Pendiente") && r.Llegada.Date == DateTime.Today);
+        var departures = SampleData.Reservas.Count(r => r.Estado == "En estancia" && r.Salida.Date == DateTime.Today);
         var occupied = SampleData.Habitaciones.Count(r => r.Estado == "Ocupada" && !r.Bloqueada);
         var available = SampleData.Habitaciones.Count(r => r.Estado == "Disponible" && !r.Bloqueada);
         return [new("Llegadas de hoy", arrivals.ToString(), "Reservas previstas", "Information"), new("Salidas de hoy", departures.ToString(), "Revisar folios", "Warning"), new("Ocupación actual", $"{occupied * 100 / Math.Max(1, SampleData.Habitaciones.Count)}%", $"{occupied} habitaciones ocupadas", "Success"), new("Habitaciones disponibles", available.ToString(), "Operativas y listas", "Neutral")];
@@ -16,7 +17,7 @@ public sealed class DashboardService
 
     public IReadOnlyList<DashboardArrival> LlegadasYSalidas()
     {
-        var today = SampleData.Reservas.Where(r => r.Estado != "Cancelada" && (r.Llegada.Date == DateTime.Today || r.Salida.Date == DateTime.Today)).OrderBy(r => r.Llegada).Take(12);
+        var today = SampleData.Reservas.Where(r => ((r.Estado is "Confirmada" or "Pendiente") && r.Llegada.Date == DateTime.Today) || (r.Estado == "En estancia" && r.Salida.Date == DateTime.Today)).OrderBy(r => r.Llegada).Take(12);
         return today.Select(r => new DashboardArrival(r.Llegada.Date == DateTime.Today ? "15:00" : "11:00", r.Huesped, SampleData.Habitaciones.First(h => h.Id == r.Habitacion).Numero, r.Llegada.Date == DateTime.Today ? "Llegada" : "Salida", r.Llegada.Date == DateTime.Today ? "Check-in" : "Check-out", r.Id)).ToList();
     }
 

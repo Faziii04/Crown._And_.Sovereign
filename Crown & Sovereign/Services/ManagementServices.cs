@@ -14,7 +14,7 @@ public sealed class AdministracionService
     public void CambiarEstadoModulo(int id,bool activo){if(!NavigationService.Puede("Módulos y parámetros"))throw new UnauthorizedAccessException();var item=SampleData.Modulos.First(m=>m.Id==id);SampleData.Modulos[SampleData.Modulos.IndexOf(item)]=item with{Activo=activo};Registrar("Estado de módulo",$"{item.Nombre}: {activo}");}
     public void GuardarConfiguracion(string clave,string valor){if(!NavigationService.Puede("Configuración del hotel"))throw new UnauthorizedAccessException();if(string.IsNullOrWhiteSpace(valor))throw new InvalidOperationException("El valor no puede quedar vacío.");SampleData.ConfiguracionHotel[clave]=valor.Trim();Registrar("Configuración del hotel",$"{clave}: {valor}");}
     public IReadOnlyList<AuditoriaModel> Auditoria()=>SampleData.Auditoria;
-    private static void Registrar(string cambio,string despues)=>SampleData.Auditoria.Insert(0,new(DateTime.Now,SesionActual.Usuario?.Usuario??"demo",cambio,"—",despues));
+    private static void Registrar(string cambio,string despues)=>AuditoriaRepositorio.Registrar(new(DateTime.Now,SesionActual.Usuario?.Usuario??"demo",cambio,"—",despues));
 }
 
 public sealed class GerenciaService

@@ -22,7 +22,18 @@ public sealed class HuespedModel
     public int Id { get; init; } public string Nombre { get; set; } = ""; public string Documento { get; init; } = "";
     public string Email { get; set; } = ""; public string Telefono { get; set; } = ""; public int Habitacion { get; set; }
     public string Paquete { get; set; } = "Sin paquete"; public string RolEnReserva { get; set; } = "Principal";
-    public bool ConsentimientoDatos { get; set; } = true;
+    private bool _consentimientoDatos = true;
+    // Al cambiar el consentimiento se guarda una fila nueva en la base (no cuando se lee la base).
+    public bool ConsentimientoDatos
+    {
+        get => _consentimientoDatos;
+        set
+        {
+            if (_consentimientoDatos == value) return;
+            _consentimientoDatos = value;
+            Crown___Sovereign.Data.HuespedRepositorio.GuardarConsentimiento(Id, value);
+        }
+    }
 }
 public sealed class ReservaModel
 {
