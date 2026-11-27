@@ -1,0 +1,18 @@
+<UserControl x:Class="Crown___Sovereign.Views.UserControls.Gerencia.Supervision.Politicas.PoliticasServiciosControl" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+ <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="4">
+  <Border x:Name="MissingBanner" Background="#FFF7E6" BorderBrush="#F4D38A" BorderThickness="1" CornerRadius="7" Padding="10" Margin="0,0,0,10"><TextBlock Text="No hay una política estructurada guardada. Lo que aparece en los campos es un borrador inicial; solo se guarda al confirmar." TextWrapping="Wrap"/></Border>
+  <Border Background="White" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="8" Padding="16">
+   <StackPanel><TextBlock Text="Política estructurada de servicios" FontSize="19" FontWeight="SemiBold"/><TextBlock Text="Configuración por hotel · cambios guardados se aplican a nuevos compromisos con snapshot disponible." Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,4,0,14"/>
+    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+     <StackPanel Margin="0,0,12,12"><TextBlock Text="Cancelación gratuita · horas"/><TextBox x:Name="HoursBox" Padding="9,6" Margin="0,4" TextChanged="Changed"/><TextBlock Text="Desde la hora de cita. En el límite exacto se considera gratuita." Foreground="{StaticResource Muted}" TextWrapping="Wrap" FontSize="11"/></StackPanel>
+     <StackPanel Grid.Column="1" Margin="12,0,0,12"><TextBlock Text="Cancelación tardía · tipo de penalización"/><ComboBox x:Name="LateType" Margin="0,4" SelectionChanged="Changed"/><TextBlock Text="Valor (Bs o %)"/><TextBox x:Name="LateValue" Padding="9,6" Margin="0,4" TextChanged="Changed"/><CheckBox x:Name="LateConsume" Content="Consumir beneficio cubierto por paquete" Margin="0,4" Checked="Changed" Unchecked="Changed"/></StackPanel>
+     <StackPanel Grid.Row="1" Margin="0,0,12,12"><TextBlock Text="Inasistencia · tipo de penalización"/><ComboBox x:Name="NoShowType" Margin="0,4" SelectionChanged="Changed"/><TextBlock Text="Valor (Bs o %)"/><TextBox x:Name="NoShowValue" Padding="9,6" Margin="0,4" TextChanged="Changed"/><CheckBox x:Name="NoShowConsume" Content="Consumir beneficio cubierto por paquete" Margin="0,4" Checked="Changed" Unchecked="Changed"/></StackPanel>
+     <Border Grid.Row="1" Grid.Column="1" Background="#F8FAFC" CornerRadius="7" Padding="12" Margin="12,0,0,12"><StackPanel><TextBlock Text="Reglas del valor" FontWeight="SemiBold"/><TextBlock Text="Monto fijo: Bs no negativo. Porcentaje: 0–100. Sin penalización: valor 0. Los importes porcentuales usan precio histórico preservado cuando existe." TextWrapping="Wrap" Margin="0,5"/></StackPanel></Border>
+    </Grid>
+    <TextBlock x:Name="DirtyText" Foreground="#B45309" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,2,0,8"/>
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"><Button Content="Simular política" Padding="12,7" Margin="0,0,8,0" Click="Simulate_Click"/><Button Content="Restablecer cambios" Padding="12,7" Margin="0,0,8,0" Click="Reset_Click"/><Button Content="Guardar cambios" Padding="12,7" Click="Save_Click"/></StackPanel>
+   </StackPanel>
+  </Border>
+  <TextBlock Text="Las reglas configuradas no crean cargos al editarlas. Las autorizaciones financieras siguen siendo obligatorias." Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,10"/>
+ </StackPanel></ScrollViewer>
+</UserControl>

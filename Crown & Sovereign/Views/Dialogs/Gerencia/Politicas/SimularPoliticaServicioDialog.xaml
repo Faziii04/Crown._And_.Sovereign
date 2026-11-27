@@ -1,0 +1,15 @@
+<Window x:Class="Crown___Sovereign.Views.Dialogs.Gerencia.Politicas.SimularPoliticaServicioDialog" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Simular política de servicio" Width="560" Height="650" WindowStartupLocation="CenterOwner" Background="{StaticResource Canvas}">
+ <Grid Margin="20"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><StackPanel><TextBlock Text="Simular política de servicio" FontSize="22" FontWeight="SemiBold"/><TextBlock Text="Evalúa cancelación tardía o inasistencia usando esta configuración sin cambiar citas, folios ni beneficios." TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,4,0,12"/></StackPanel>
+  <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"><StackPanel>
+   <TextBlock Text="Escenario"/><ComboBox x:Name="ScenarioBox" Margin="0,4,0,10"/>
+   <TextBlock Text="Fecha de la cita"/><DatePicker x:Name="AppointmentDate" Margin="0,4,0,10"/>
+   <TextBlock Text="Hora de la cita"/><TextBox x:Name="AppointmentTime" Text="15:00" Padding="8,6" Margin="0,4,0,10"/>
+   <TextBlock Text="Fecha y hora simulada"/><DatePicker x:Name="ActionDate" Margin="0,4,0,5"/><TextBox x:Name="ActionTime" Text="12:00" Padding="8,6" Margin="0,0,0,10"/>
+   <TextBlock Text="Importe histórico de referencia (si se conoce)"/><TextBox x:Name="BaseAmount" Padding="8,6" Margin="0,4,0,10"/>
+   <CheckBox x:Name="CoveredBox" Content="Servicio cubierto por un beneficio de paquete" Margin="0,4"/>
+   <CheckBox x:Name="UnlimitedBox" Content="Beneficio ilimitado" Margin="0,4"/>
+   <Border Background="White" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="7" Padding="12" Margin="0,12,0,0"><StackPanel><TextBlock x:Name="ResultTitle" FontSize="17" FontWeight="SemiBold"/><TextBlock x:Name="ResultMessage" TextWrapping="Wrap" Margin="0,5"/><TextBlock x:Name="ResultBasis" Foreground="{StaticResource Muted}" TextWrapping="Wrap"/><TextBlock x:Name="ResultImpact" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,5,0,0"/></StackPanel></Border>
+  </StackPanel></ScrollViewer>
+  <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0"><Button Content="Cerrar" Padding="14,7" Click="Close_Click"/><Button Content="Simular" Padding="14,7" Margin="8,0,0,0" Click="Simulate_Click"/></StackPanel>
+ </Grid>
+</Window>

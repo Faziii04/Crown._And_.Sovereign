@@ -15,8 +15,9 @@ public partial class EfectivoEsperadoControl : UserControl
         ExpectedText.Text = $"Bs {summary.EfectivoEsperado:N2}";
         OpeningText.Text = $"Fondo de apertura     Bs {summary.Turno.MontoInicial:N2}";
         CashInText.Text = $"Cobros en efectivo   +Bs {summary.EfectivoCobros:N2}";
-        CashOutText.Text = $"Devoluciones efectivo  −Bs {summary.EfectivoDevoluciones:N2}";
-        FormulaText.Text = $"{summary.Turno.MontoInicial:N2} + {summary.EfectivoCobros:N2} − {summary.EfectivoDevoluciones:N2} = Bs {summary.EfectivoEsperado:N2}";
+        CashOutText.Text = $"Devoluciones en efectivo  −Bs {summary.EfectivoDevoluciones:N2}";
+        CashCancellationText.Text = $"Anulaciones en efectivo  −Bs {summary.EfectivoAnulaciones:N2}";
+        FormulaText.Text = $"{summary.Turno.MontoInicial:N2} + {summary.EfectivoCobros:N2} − {summary.EfectivoDevoluciones:N2} − {summary.EfectivoAnulaciones:N2} = Bs {summary.EfectivoEsperado:N2}";
     }
     private void Details_Click(object sender, RoutedEventArgs e)
     {

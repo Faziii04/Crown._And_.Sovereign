@@ -28,14 +28,15 @@ public sealed record FolioLine(DateTime Fecha, string Tipo, string Concepto, dec
     public string Estado { get; init; } = "Aplicado";
 }
 public sealed record CashDeskSummary(bool Abierta, decimal Apertura, decimal Efectivo, decimal NoEfectivo, decimal Devoluciones, decimal Esperado);
-public sealed record CashDeskShiftSummary(TurnoCajaModel Turno, decimal EfectivoCobros, decimal EfectivoDevoluciones, decimal NoEfectivo, decimal TotalPagos, decimal EfectivoEsperado, IReadOnlyList<MetodoPagoResumen> PorMetodo);
+public sealed record CashDeskShiftSummary(TurnoCajaModel Turno, decimal EfectivoCobros, decimal EfectivoDevoluciones, decimal NoEfectivo, decimal TotalPagos, decimal EfectivoEsperado, IReadOnlyList<MetodoPagoResumen> PorMetodo)
+{ public decimal EfectivoAnulaciones { get; init; } }
 public sealed record MetodoPagoResumen(string Metodo, decimal Importe, bool EsEfectivo);
 public sealed record CashMovementRow(int Id, DateTime Fecha, string Tipo, string Huesped, int FolioId, string Metodo, decimal Monto, string Concepto, int? PagoId, string Estado);
 public sealed record PaymentDirectoryRow(PagoModel Pago, string Huesped, string Documento, int? ReservaId, int? EstanciaId, string Folio, string Habitacion, string EstadoVista, decimal Reembolsado)
 { public int Id => Pago.Id; public DateTime Fecha => Pago.Fecha; public string Metodo => Pago.Metodo; public decimal Monto => Pago.Monto; public string Estado => EstadoVista; public string Concepto => Pago.Concepto; public int FolioId => Pago.FolioId; }
 public sealed record FolioSelectorRow(int FolioId, string Huésped, string Contexto, string Habitación, string Tipo, string Estado, decimal Saldo, int GuestId, int? ReservaId, int? EstanciaId);
 public sealed record CorrectionDirectoryRow(int Id, string Tipo, string Huesped, int PagoId, int FolioId, decimal Monto, string Metodo, string Motivo, string Estado, string SolicitadoPor, string AutorizadoPor, DateTime Fecha, bool EsEjecutable)
-{ public string Responsables => $"{SolicitadoPor} · {AutorizadoPor}"; }
+{ public string Responsables => $"{SolicitadoPor} · {AutorizadoPor}"; public string MotivoRechazo { get; init; } = ""; public string Descripcion { get; init; } = ""; public DateTime? FechaPago { get; init; } public DateTime? Ejecutada { get; init; } public string EjecutadoPor { get; init; } = "—"; public decimal PagoOriginal { get; init; } }
 public sealed record InvoiceDirectoryRow(FacturaModel Factura, string Huesped, string Folio, string Contexto, bool Atribuida)
 { public string Numero => Factura.Numero; public DateTime Fecha => Factura.Fecha; public decimal Subtotal => Factura.Subtotal; public decimal Impuesto => Factura.Impuesto; public decimal Total => Factura.Total; public string Estado => Factura.Estado; }
 public sealed record InvoiceDraftModel(int FolioId, string Cliente, string Documento, decimal Subtotal, decimal PorcentajeImpuesto, decimal Impuesto, decimal Total, IReadOnlyList<FacturaLineaModel> Lineas);

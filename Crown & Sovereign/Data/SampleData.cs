@@ -19,6 +19,9 @@ public static class SampleData
     public static readonly List<ConvenioModel> Convenios = [];
     public static readonly List<ConvenioServicioModel> ConveniosServicios = [];
     public static readonly List<PoliticaModel> Politicas = [new(1,"Check-in","Ingreso estándar del huésped","15:00"),new(2,"Check-out","Salida estándar del huésped","11:00"),new(3,"Cancelación","Plazo para cancelar sin penalidad","48 horas"),new(4,"Mascotas","Admisión sujeta a habitaciones asignadas","Consultar")];
+    // Only used without PostgreSQL. Values are demonstration data, not production policy.
+    public static readonly List<PoliticaServicioModel> PoliticasServicio = [new(1,4,"Porcentaje",50m,"Porcentaje",25m,true,true)];
+    public static readonly List<ConfiguracionAuditModel> HistorialPoliticas = [];
     public static readonly List<ModuloModel> Modulos = [];
     public static readonly List<ReporteModel> Reportes = [];
     public static readonly List<CitaServicioModel> Citas = [];
@@ -67,6 +70,7 @@ public static class SampleData
     public static readonly List<MovimientoModel> Movimientos = [];
     public static readonly List<CierreCajaModel> CierresCaja = [];
     public static readonly List<FacturaModel> Facturas = [];
+    public static readonly List<NotaCreditoModel> NotasCredito = [];
     public static readonly List<TurnoCajaModel> TurnosCaja = [];
     public static readonly List<MovimientoCajaModel> MovimientosCaja = [];
     public static readonly List<PagoModel> Pagos = [];
@@ -351,7 +355,7 @@ public static class SampleData
         TurnosCaja.Add(new(4, 5, yesterday.AddHours(22), 500m, "Cerrado") { Cierre = shiftToday.AddHours(6), EfectivoContado = 700m, CierreCajaId = 3, ObservacionesCierre = "Turno nocturno." });
         TurnosCaja.Add(new(5, 5, shiftToday.AddHours(8), 650m, "Abierto"));
         CajaAbierta = true;
-        CierresCaja.Add(new CierreCajaModel(1, yesterday.AddHours(16), 1380m, 1330m, -50m, "Diferencia revisada en el arqueo.") { TurnoCajaId = 2, UsuarioId = 2, Apertura = yesterday.AddHours(8), AperturaMonto = 800m, EfectivoCobros = 580m, EfectivoDevoluciones = 0m, NoEfectivo = 300m });
+        CierresCaja.Add(new CierreCajaModel(1, yesterday.AddHours(16), 1380m, 1330m, -50m, "Diferencia declarada durante el arqueo.") { TurnoCajaId = 2, UsuarioId = 2, Apertura = yesterday.AddHours(8), AperturaMonto = 800m, EfectivoCobros = 580m, EfectivoDevoluciones = 0m, NoEfectivo = 300m, UsuarioRevisorId = 4, FechaRevision = yesterday.AddHours(17) });
         CierresCaja.Add(new CierreCajaModel(2, shiftToday.AddHours(6), 500m, 500m, 0m, "") { TurnoCajaId = 3, UsuarioId = 2, Apertura = shiftToday, AperturaMonto = 300m, EfectivoCobros = 200m, EfectivoDevoluciones = 0m });
         CierresCaja.Add(new CierreCajaModel(3, shiftToday.AddHours(6), 680m, 700m, 20m, "Turno nocturno; sobrante documentado.") { TurnoCajaId = 4, UsuarioId = 5, Apertura = yesterday.AddHours(22), AperturaMonto = 500m, EfectivoCobros = 200m, EfectivoDevoluciones = 20m });
 
@@ -396,6 +400,16 @@ public static class SampleData
             Subtotal = 800m, Cliente = Huespedes[0].Nombre, DocumentoCliente = Huespedes[0].Documento, UsuarioEmiteId = 2,
             Lineas = [new(0, "Estancia histórica · huésped 1", 1, 800m, 800m)], EstanciaId = 1000
         });
+        NotasCredito.Add(new NotaCreditoModel(1, 100, 80m, "Ajuste comercial documentado", "Emitida")
+        { Numero = "NC-2026-001", Fecha = yesterday.AddDays(-1) });
+        for (var index = 0; index < Folios.Count; index++)
+        {
+            var folio = Folios[index];
+            var charges = Cargos.Where(item => item.FolioId == folio.Id && !item.Anulado).Sum(item => item.Monto);
+            var payments = Pagos.Where(item => item.FolioId == folio.Id && item.Estado != "Anulado").Sum(item => item.Monto);
+            var refunds = Devoluciones.Where(item => item.Estado == "Ejecutada" && Pagos.Any(payment => payment.Id == item.PagoId && payment.FolioId == folio.Id)).Sum(item => item.Monto);
+            Folios[index] = folio with { Saldo = charges - payments + refunds };
+        }
     }
 
     private static void FreezePackageBenefits(int reservationId)
@@ -423,7 +437,7 @@ public static class SampleData
         Devoluciones.Add(refund);
         if (executionShiftId is int shiftId)
         {
-            Devoluciones[^1] = Devoluciones[^1] with { Estado = "Ejecutada", Ejecutada = TurnosCaja.First(item => item.Id == shiftId).Apertura.AddHours(2), TurnoEjecucionId = shiftId, MetodoEjecucion = payment.Metodo };
+            Devoluciones[^1] = Devoluciones[^1] with { Estado = "Ejecutada", Ejecutada = TurnosCaja.First(item => item.Id == shiftId).Apertura.AddHours(2), TurnoEjecucionId = shiftId, UsuarioEjecutorId = TurnosCaja.First(item => item.Id == shiftId).UsuarioId, MetodoEjecucion = payment.Metodo };
             MovimientosCaja.Add(new(MovimientosCaja.Count + 1, shiftId, Devoluciones[^1].Ejecutada!.Value, "Devolución", amount, reason)
             { PagoId = paymentId, FolioId = payment.FolioId, Metodo = payment.Metodo, UsuarioId = TurnosCaja.First(item => item.Id == shiftId).UsuarioId, CorreccionId = id });
         }

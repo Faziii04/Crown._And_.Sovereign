@@ -18,7 +18,8 @@ public sealed class DashboardService
     public IReadOnlyList<DashboardArrival> LlegadasYSalidas()
     {
         var today = SampleData.Reservas.Where(r => ((r.Estado is "Confirmada" or "Pendiente") && r.Llegada.Date == DateTime.Today) || (r.Estado == "En estancia" && r.Salida.Date == DateTime.Today)).OrderBy(r => r.Llegada).Take(12);
-        return today.Select(r => new DashboardArrival(r.Llegada.Date == DateTime.Today ? "15:00" : "11:00", r.Huesped, SampleData.Habitaciones.First(h => h.Id == r.Habitacion).Numero, r.Llegada.Date == DateTime.Today ? "Llegada" : "Salida", r.Llegada.Date == DateTime.Today ? "Check-in" : "Check-out", r.Id)).ToList();
+        var policies = new PoliticaHotelService();
+        return today.Select(r => new DashboardArrival((r.Llegada.Date == DateTime.Today ? policies.HoraCheckIn() : policies.HoraCheckOut()).ToString("HH:mm"), r.Huesped, SampleData.Habitaciones.First(h => h.Id == r.Habitacion).Numero, r.Llegada.Date == DateTime.Today ? "Llegada" : "Salida", r.Llegada.Date == DateTime.Today ? "Check-in" : "Check-out", r.Id)).ToList();
     }
 
     public IReadOnlyList<DashboardMetric> Operaciones()
@@ -105,16 +106,13 @@ public sealed class DashboardService
         var expiringAgreements = SampleData.Convenios.Count(item => item.Activo && item.VigenciaDesde.Date <= DateTime.Today && item.VigenciaHasta.Date >= DateTime.Today && item.VigenciaHasta.Date <= DateTime.Today.AddDays(90));
         var futureOccupancy = UpcomingOccupancy(DateTime.Today, 7);
         var currentFolioBalance = new FolioService().CalcularSaldo();
-        var alerts = AlertasOperacion().Take(6).ToList();
-        var operations = new List<DashboardMetric>
-        {
-            new("Llegadas hoy", arrivals.ToString(), "Reservas con llegada prevista"),
-            new("Salidas hoy", departures.ToString(), "Reservas con salida prevista"),
-            new("Ocupación próximos 7 días", $"{futureOccupancy:N1}%", "Asignaciones confirmadas y estancias activas", "Information"),
-            new("Tareas de habitaciones", openTasks.ToString(), "Pendientes o en progreso", openTasks > 0 ? "Warning" : "Success"),
-            new("Incidencias abiertas", openIncidents.ToString(), $"{blockedRooms} habitación(es) bloqueada(s)", openIncidents > 0 ? "Warning" : "Success"),
-            new("Artículos bajo mínimo", lowStock.ToString(), "Revisión de inventario", lowStock > 0 ? "Warning" : "Success")
-        };
+        var supervision = new SupervisionOperativaService().Obtener("Hoy");
+        var alerts = supervision.Alertas.Where(item => item.Nivel != "Informativa").Take(6)
+            .Select(item => new DashboardAlert(item.Titulo, item.Detalle, item.Nivel, "Consultar", "Operaciones")).ToList();
+        var operations = supervision.Indicadores.Select(item => new DashboardMetric(item.Titulo, item.Valor, item.Contexto,
+            item.Valor == "0" ? "Success" : item.Titulo == "Incidencias prioritarias" ? "Danger" : "Warning")).ToList();
+        operations.Add(new DashboardMetric("Tareas de limpieza pendientes", supervision.TareasPendientes.ToString(), "Tareas en estado pendiente", supervision.TareasPendientes > 0 ? "Warning" : "Success"));
+        operations.Add(new DashboardMetric("Habitaciones bloqueadas", supervision.HabitacionesBloqueadas.ToString(), "Estado actual registrado", supervision.HabitacionesBloqueadas > 0 ? "Warning" : "Success"));
         var commercial = new List<DashboardMetric>
         {
             new("Paquetes adquiridos", packageSales.ToString(), "Unidades registradas por reserva"),

@@ -10,11 +10,13 @@ public partial class GerenciaDashboardControl : UserControl
     private readonly DashboardService _service = new();
     private DashboardPeriod _period = DashboardService.PeriodoPredeterminado();
     public event EventHandler<string>? NavigationRequested;
+    public event EventHandler<DashboardDecision>? CorrectionReviewRequested;
     public GerenciaDashboardControl()
     {
         InitializeComponent();
-        DecisionPanel.DecisionsChanged += (_, _) => LoadSummary();
+        DecisionPanel.CorrectionReviewRequested += (_, item) => CorrectionReviewRequested?.Invoke(this, item);
         CommercialPanel.NavigationRequested += (_, destination) => NavigationRequested?.Invoke(this, destination);
+        OperationsPanel.SectionRequested += (_, section) => NavigationRequested?.Invoke(this, $"Operaciones|{section}");
         LoadSummary();
     }
     private void PeriodFilter_PeriodChanged(object? sender, DashboardPeriod e) { _period = e; LoadSummary(); }

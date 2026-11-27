@@ -590,7 +590,7 @@ public sealed class SolicitudServicioService
         CitaServicioModel? appointment=null;
         if(service.RequiereCita&&fecha is DateTime start)
         {
-            appointment=new CitaServicioModel(Persistencia.SiguienteId("cita_servicio","cita_id",()=>SampleData.Citas.Count==0?1:SampleData.Citas.Max(item=>item.Id)+1),guest.Id,service.Id,start,start.AddMinutes(service.DuracionMinutos),"Por asignar","Solicitada"){EstanciaId=stay.Id,SolicitudId=request.Id};
+            appointment=new CitaServicioModel(Persistencia.SiguienteId("cita_servicio","cita_id",()=>SampleData.Citas.Count==0?1:SampleData.Citas.Max(item=>item.Id)+1),guest.Id,service.Id,start,start.AddMinutes(service.DuracionMinutos),"Por asignar","Solicitada"){EstanciaId=stay.Id,SolicitudId=request.Id,PoliticaAplicadaJson=PoliticaHotelService.SnapshotActualServicio()};
             request=request with{Estado="Solicitada",CitaServicioId=appointment.Id};
         }
         var transfer=service.RequiereTraslado?new TrasladoModel(Persistencia.SiguienteId("traslado","traslado_id",()=>SampleData.Traslados.Count==0?1:SampleData.Traslados.Max(item=>item.Id)+1),guest.Id,origen.Trim(),destino.Trim(),fecha??DateTime.Now,"Solicitado"){EstanciaId=stay.Id,ServicioId=service.Id,SolicitudId=request.Id,Pasajeros=pasajeros,Observaciones=descripcion.Trim()}:null;
@@ -640,6 +640,15 @@ public sealed class CitaServicioService
             .Where(item=>string.IsNullOrWhiteSpace(empleado)||empleado=="Todo el personal"||item.Employee==empleado)
             .OrderBy(item=>item.Start).ToList();
     }
+    public bool TieneConflictoHorario(string responsable, DateTime inicio, DateTime fin, int? excluirCitaId = null)
+        => HasConflict(responsable, inicio, fin, excluirCitaId);
+    public bool EsResponsableElegible(int servicioId, string responsable)
+    {
+        var employee = SampleData.Empleados.FirstOrDefault(item => item.Nombre.Equals(responsable, StringComparison.OrdinalIgnoreCase) && item.Cargo == "Servicios");
+        if (employee is null) return false;
+        var eligible = SampleData.EmpleadosServicios.Where(item => item.ServicioId == servicioId && item.Activo).Select(item => item.EmpleadoId).ToHashSet();
+        return eligible.Count == 0 || eligible.Contains(employee.Id);
+    }
     public CitaServicioModel Programar(int guestId,int serviceId,DateTime inicio,string responsable)
     {
         if(!NavigationService.Puede("Agenda de servicios"))throw new UnauthorizedAccessException("Tu rol no puede programar citas.");
@@ -651,7 +660,7 @@ public sealed class CitaServicioService
         if(inicio>=stay.CheckOut)throw new InvalidOperationException("La cita debe ocurrir durante la estancia activa.");
         var finish=inicio.AddMinutes(service.DuracionMinutos);
         if(HasConflict(responsable,inicio,finish,null))throw new InvalidOperationException("El responsable ya tiene una cita que se superpone con ese horario.");
-        var appointment=new CitaServicioModel(SampleData.Citas.Count==0?1:SampleData.Citas.Max(item=>item.Id)+1,guest.Id,serviceId,inicio,finish,responsable,"Confirmada"){EstanciaId=stay.Id,UsuarioConfirmaId=SesionActual.Usuario?.Id,Confirmada=DateTime.Now};SampleData.Citas.Add(appointment);return appointment;
+        var appointment=new CitaServicioModel(SampleData.Citas.Count==0?1:SampleData.Citas.Max(item=>item.Id)+1,guest.Id,serviceId,inicio,finish,responsable,"Confirmada"){EstanciaId=stay.Id,UsuarioConfirmaId=SesionActual.Usuario?.Id,Confirmada=DateTime.Now,PoliticaAplicadaJson=PoliticaHotelService.SnapshotActualServicio()};SampleData.Citas.Add(appointment);return appointment;
     }
     public void Iniciar(int citaId)
     {
@@ -697,9 +706,8 @@ public sealed class CitaServicioService
     private static bool HasConflict(string responsible,DateTime start,DateTime finish,int? exceptId)=>SampleData.Citas.Any(item=>item.Id!=exceptId&&item.AsignadoA==responsible&&item.Estado is not ("Cancelada" or "No presentado" or "Completada")&&start<item.Fin&&finish>item.Inicio);
     private static void ValidarResponsable(int serviceId,string responsible)
     {
-        var employee=SampleData.Empleados.FirstOrDefault(item=>item.Nombre.Equals(responsible,StringComparison.OrdinalIgnoreCase)&&item.Cargo=="Servicios")??throw new InvalidOperationException("Selecciona un colaborador de servicios válido.");
-        var eligible=SampleData.EmpleadosServicios.Where(item=>item.ServicioId==serviceId&&item.Activo).Select(item=>item.EmpleadoId).ToHashSet();
-        if(eligible.Count>0&&!eligible.Contains(employee.Id))throw new InvalidOperationException("Ese colaborador no está asociado como elegible para este servicio.");
+        if (!new CitaServicioService().EsResponsableElegible(serviceId, responsible))
+            throw new InvalidOperationException("El responsable no existe como colaborador de servicios o no está asociado como elegible para este servicio.");
     }
 }
 public sealed class InventarioService

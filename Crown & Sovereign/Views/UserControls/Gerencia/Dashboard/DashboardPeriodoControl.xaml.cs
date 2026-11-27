@@ -11,7 +11,7 @@ public partial class DashboardPeriodoControl : UserControl
     public DashboardPeriodoControl()
     {
         InitializeComponent();
-        PeriodBox.ItemsSource = new[] { "Hoy", "Últimos 7 días", "Este mes", "Mes anterior", "Últimos 30 días", "Últimos 90 días", "Este año", "Personalizado" };
+        PeriodBox.ItemsSource = new[] { "Hoy", "Ayer", "Últimos 7 días", "Este mes", "Mes anterior", "Últimos 30 días", "Últimos 90 días", "Este año", "Personalizado" };
         PeriodBox.SelectedItem = "Este mes";
         _initializing = false;
         FromPicker.SelectedDate = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
@@ -38,6 +38,7 @@ public partial class DashboardPeriodoControl : UserControl
         switch (selected)
         {
             case "Hoy": from = to = today; break;
+            case "Ayer": from = to = today.AddDays(-1); break;
             case "Últimos 7 días": from = today.AddDays(-6); to = today; break;
             case "Este mes": from = new DateTime(today.Year, today.Month, 1); to = today; break;
             case "Mes anterior": from = new DateTime(today.Year, today.Month, 1).AddMonths(-1); to = new DateTime(today.Year, today.Month, 1).AddDays(-1); break;

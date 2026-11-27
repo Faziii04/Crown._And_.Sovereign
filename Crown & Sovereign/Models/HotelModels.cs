@@ -109,10 +109,11 @@ public sealed record TurnoCajaModel(int Id, int UsuarioId, DateTime Apertura, de
 public sealed record MovimientoCajaModel(int Id, int TurnoId, DateTime Fecha, string Tipo, decimal Monto, string Concepto)
 { public int? PagoId { get; init; } public int? FolioId { get; init; } public string Metodo { get; init; } = ""; public int UsuarioId { get; init; } public int? CorreccionId { get; init; } }
 public sealed record DevolucionModel(int Id, int PagoId, decimal Monto, string Motivo, string Estado)
-{ public DateTime Solicitada { get; init; } public int UsuarioSolicitaId { get; init; } public int? UsuarioAutorizaId { get; init; } public DateTime? FechaAutorizacion { get; init; } public DateTime? Ejecutada { get; init; } public int? TurnoEjecucionId { get; init; } public string MetodoEjecucion { get; init; } = ""; public string Descripcion { get; init; } = ""; }
+{ public DateTime Solicitada { get; init; } public int UsuarioSolicitaId { get; init; } public int? UsuarioAutorizaId { get; init; } public DateTime? FechaAutorizacion { get; init; } public DateTime? Ejecutada { get; init; } public int? TurnoEjecucionId { get; init; } public int? UsuarioEjecutorId { get; init; } public string MetodoEjecucion { get; init; } = ""; public string Descripcion { get; init; } = ""; public string MotivoRechazo { get; init; } = ""; }
 public sealed record AnulacionModel(int Id, int PagoId, string Motivo, string Estado)
-{ public DateTime Solicitada { get; init; } public int UsuarioSolicitaId { get; init; } public int? UsuarioAutorizaId { get; init; } public DateTime? FechaAutorizacion { get; init; } public DateTime? Ejecutada { get; init; } public int? TurnoEjecucionId { get; init; } public string Descripcion { get; init; } = ""; }
-public sealed record NotaCreditoModel(int Id, int FacturaId, decimal Monto, string Motivo, string Estado);
+{ public DateTime Solicitada { get; init; } public int UsuarioSolicitaId { get; init; } public int? UsuarioAutorizaId { get; init; } public DateTime? FechaAutorizacion { get; init; } public DateTime? Ejecutada { get; init; } public int? TurnoEjecucionId { get; init; } public int? UsuarioEjecutorId { get; init; } public string Descripcion { get; init; } = ""; public string MotivoRechazo { get; init; } = ""; }
+public sealed record NotaCreditoModel(int Id, int FacturaId, decimal Monto, string Motivo, string Estado)
+{ public string Numero { get; init; } = ""; public DateTime Fecha { get; init; } = DateTime.Now; }
 public sealed record ConceptoCargoModel(int Id, string Nombre, string Categoria);
 public sealed record PagoModel(int Id, int FolioId, decimal Monto, string Metodo, DateTime Fecha, string Estado)
 { public int TurnoCajaId { get; init; } public int UsuarioId { get; init; } public string Referencia { get; init; } = ""; public string Concepto { get; init; } = "Pago de folio"; public bool EsAnticipo { get; init; } }
@@ -122,7 +123,7 @@ public sealed record FacturaModel(int Id, int FolioId, string Numero, DateTime F
 public sealed record FacturaLineaModel(int CargoId, string Concepto, int Cantidad, decimal PrecioUnitario, decimal Importe);
 public sealed record ImpuestoModel(int Id, string Nombre, decimal Porcentaje, bool Activo);
 public sealed record CitaServicioModel(int Id, int HuespedId, int ServicioId, DateTime Inicio, DateTime Fin, string AsignadoA, string Estado)
-{ public int? EstanciaId { get; init; } public int? SolicitudId { get; init; } public int? UsuarioConfirmaId { get; init; } public DateTime? Confirmada { get; init; } }
+{ public int? EstanciaId { get; init; } public int? SolicitudId { get; init; } public int? UsuarioConfirmaId { get; init; } public DateTime? Confirmada { get; init; } public string PoliticaAplicadaJson { get; init; } = ""; }
 public sealed record SolicitudServicioModel(int Id, int HuespedId, int ServicioId, DateTime Solicitada, DateTime? FechaDeseada, string Descripcion, string Estado, bool RequiereCita)
 {
     public int? EstanciaId { get; init; } public int? ReservaId { get; init; } public int UsuarioSolicitaId { get; init; }
@@ -182,7 +183,7 @@ public sealed record MovimientoModel(DateTime Fecha, string Tipo, string Concept
 { public int? EstanciaId { get; init; } public int? TurnoCajaId { get; init; } public int? PagoId { get; init; } public int? FolioId { get; init; } }
 public sealed record CajaModel(int Id, string Estado, decimal Apertura, DateTime FechaApertura);
 public sealed record CierreCajaModel(int Id, DateTime Fecha, decimal Esperado, decimal Contado, decimal Diferencia, string Observaciones)
-{ public int TurnoCajaId { get; init; } public int UsuarioId { get; init; } public DateTime Apertura { get; init; } public decimal AperturaMonto { get; init; } public decimal EfectivoCobros { get; init; } public decimal EfectivoDevoluciones { get; init; } public decimal NoEfectivo { get; init; } }
+{ public int TurnoCajaId { get; init; } public int UsuarioId { get; init; } public DateTime Apertura { get; init; } public decimal AperturaMonto { get; init; } public decimal EfectivoCobros { get; init; } public decimal EfectivoDevoluciones { get; init; } public decimal NoEfectivo { get; init; } public int? UsuarioRevisorId { get; init; } public DateTime? FechaRevision { get; init; } }
 public sealed record NotificacionModel(int Id, string Mensaje, string Destino, DateTime Fecha, bool Leida)
 { public string ModuloDestino { get; init; } = ""; public string TipoRegistroDestino { get; init; } = ""; public int? RegistroDestinoId { get; init; } }
 public sealed record ReporteModel(int Id, string Nombre, string Categoria, DateTime Generado, string Estado);

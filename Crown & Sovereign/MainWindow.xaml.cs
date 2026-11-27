@@ -10,6 +10,7 @@ using Crown___Sovereign.Views.UserControls.Recepcion.Estancias;
 using Crown___Sovereign.Views.UserControls.Recepcion.Huespedes;
 using Crown___Sovereign.Views.UserControls.Recepcion.Reservas;
 using Crown___Sovereign.Views.UserControls.Gerencia.Finanzas;
+using Crown___Sovereign.Views.UserControls.Gerencia.Supervision;
 using Crown___Sovereign.Views.Windows;
 
 namespace Crown___Sovereign;
@@ -67,10 +68,30 @@ public partial class MainWindow : Window
         if (control is OperacionesDashboardControl operations) operations.NavigationRequested += (_, destino) => AbrirModulo(destino);
         if (control is Crown___Sovereign.Views.UserControls.Gerencia.Dashboard.GerenciaDashboardControl manager) manager.NavigationRequested += (_, destino) =>
         {
+            if (destino.StartsWith("Operaciones|", StringComparison.Ordinal))
+            {
+                AbrirModulo("Operaciones");
+                if (MainContent.Content is Crown___Sovereign.Views.UserControls.Gerencia.Supervision.OperacionesControl operationsWorkspace)
+                    operationsWorkspace.AbrirSeccion(destino[("Operaciones|".Length)..]);
+                return;
+            }
             AbrirModulo(destino);
             if (destino == "Convenios" && MainContent.Content is Crown___Sovereign.Views.UserControls.Gerencia.Comercial.ConveniosControl agreements)
                 agreements.AbrirVencimientos("Próximos");
         };
+        if (control is Crown___Sovereign.Views.UserControls.Gerencia.Dashboard.GerenciaDashboardControl managerDashboard)
+            managerDashboard.CorrectionReviewRequested += (_, correction) =>
+            {
+                AbrirModulo("Finanzas");
+                if (MainContent.Content is FinanzasControl financeView) financeView.AbrirCorreccion(correction.Tipo, correction.Id);
+            };
+        if (control is FinanzasControl finance) finance.NavigationRequested += (_, destino) =>
+        {
+            AbrirModulo(destino);
+            if (MainContent.Content is Crown___Sovereign.Views.UserControls.Gerencia.Supervision.ReportesControl reports)
+                reports.SeleccionarReporte("Ingresos y pagos");
+        };
+        if (control is PoliticasHotelControl policies) policies.NavigationRequested += destino => AbrirModulo(destino);
         if (control is HabitacionesControl rooms) rooms.NavegacionSolicitada += (destino, selectedGuest) => AbrirModulo(destino, selectedGuest);
         if (control is HuespedesControl guests)
         {

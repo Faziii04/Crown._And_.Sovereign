@@ -1,1 +1,39 @@
-<UserControl x:Class="Crown___Sovereign.Views.UserControls.Gerencia.Finanzas.FinanzasControl" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:finance="clr-namespace:Crown___Sovereign.Views.UserControls.Gerencia.Finanzas" xmlns:cash="clr-namespace:Crown___Sovereign.Views.UserControls.Recepcion.Caja"><Grid Background="{StaticResource Canvas}"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions><StackPanel Margin="24,18"><TextBlock Text="Finanzas" FontSize="26" FontWeight="SemiBold"/><TextBlock Text="Ingresos, cobros y cierres de caja" Foreground="{StaticResource Muted}" Margin="0,4"/></StackPanel><TabControl x:Name="FinanceTabs" Grid.Row="1" Margin="24,0,24,20"><TabItem Header="Resumen"><finance:ResumenFinancieroControl/></TabItem><TabItem Header="Movimientos"><finance:MovimientosFinancierosControl/></TabItem><TabItem Header="Facturación"><finance:FacturacionFinancieraControl/></TabItem><TabItem Header="Revisar correcciones"><cash:CorreccionesFinancierasControl x:Name="CorrectionsControl"/></TabItem></TabControl></Grid></UserControl>
+<UserControl x:Class="Crown___Sovereign.Views.UserControls.Gerencia.Finanzas.FinanzasControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:finance="clr-namespace:Crown___Sovereign.Views.UserControls.Gerencia.Finanzas"
+             xmlns:dashboard="clr-namespace:Crown___Sovereign.Views.UserControls.Gerencia.Dashboard">
+    <Grid Background="{StaticResource Canvas}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        <Grid Margin="24,12,24,5">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <StackPanel>
+                <TextBlock Text="Finanzas" FontSize="26" FontWeight="SemiBold"/>
+                <TextBlock Text="Supervisa cargos, cobros, saldos y actividad de caja." Foreground="{StaticResource Muted}" Margin="0,3,0,0"/>
+            </StackPanel>
+            <Button Grid.Column="1" Content="Consultar reporte financiero" VerticalAlignment="Center" Padding="12,8" Style="{StaticResource SecondaryButton}" Click="Report_Click"/>
+        </Grid>
+        <dashboard:DashboardPeriodoControl x:Name="PeriodFilter" Grid.Row="1" Margin="24,0,24,5" PeriodChanged="Period_Changed"/>
+        <StackPanel Grid.Row="2" Margin="24,0,24,7">
+            <UniformGrid Columns="4" Margin="-4,0,-4,0">
+                <Border Background="White" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="6" Padding="10,7" Margin="4"><StackPanel><TextBlock Text="Cargos del periodo" Foreground="{StaticResource Muted}" FontSize="11"/><TextBlock x:Name="ChargesMetric" FontSize="19" FontWeight="SemiBold"/></StackPanel></Border>
+                <Border Background="White" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="6" Padding="10,7" Margin="4"><StackPanel><TextBlock Text="Cobros netos del periodo" Foreground="{StaticResource Muted}" FontSize="11"/><TextBlock x:Name="CollectionsMetric" FontSize="19" FontWeight="SemiBold"/></StackPanel></Border>
+                <Border Background="White" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="6" Padding="10,7" Margin="4"><StackPanel><TextBlock Text="Saldo pendiente actual" Foreground="{StaticResource Muted}" FontSize="11"/><TextBlock x:Name="BalanceMetric" FontSize="19" FontWeight="SemiBold"/></StackPanel></Border>
+                <Border Background="White" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="6" Padding="10,7" Margin="4"><StackPanel><TextBlock Text="Autorizaciones pendientes" Foreground="{StaticResource Muted}" FontSize="11"/><TextBlock x:Name="ApprovalsMetric" FontSize="19" FontWeight="SemiBold"/></StackPanel></Border>
+            </UniformGrid>
+        </StackPanel>
+        <TabControl x:Name="FinanceTabs" Grid.Row="3" Margin="24,0,24,16" Padding="4">
+            <TabItem Header="Resumen"><finance:ResumenFinancieroControl x:Name="SummaryControl"/></TabItem>
+            <TabItem Header="Movimientos"><finance:MovimientosFinancierosControl x:Name="MovementsControl"/></TabItem>
+            <TabItem Header="Saldos pendientes"><finance:SaldosPendientesControl x:Name="BalancesControl"/></TabItem>
+            <TabItem Header="Facturación"><finance:FacturacionFinancieraControl x:Name="InvoicesControl"/></TabItem>
+            <TabItem Header="Autorizaciones"><finance:AutorizacionesFinancierasControl x:Name="AuthorizationsControl"/></TabItem>
+            <TabItem Header="Cierres de caja"><finance:CierresCajaFinanzasControl x:Name="ClosuresControl"/></TabItem>
+        </TabControl>
+    </Grid>
+</UserControl>

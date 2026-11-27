@@ -34,11 +34,12 @@ public sealed class CajaService
 
         var cashIn = movements.Where(item => item.Tipo == "Cobro" && IsCash(item.Metodo)).Sum(item => item.Monto);
         var cashOut = movements.Where(item => item.Tipo == "Devolución" && IsCash(item.Metodo)).Sum(item => item.Monto);
+        var cashCancellations = movements.Where(item => item.Tipo == "Anulación" && IsCash(item.Metodo)).Sum(item => item.Monto);
         var nonCash = movements.Where(item => item.Tipo == "Cobro" && !IsCash(item.Metodo)).Sum(item => item.Monto);
         var payments = movements.Where(item => item.Tipo == "Cobro").Sum(item => item.Monto);
         var methods = SampleData.MetodosPago.Where(item => item.Activo).Select(method => new MetodoPagoResumen(
             method.Nombre, movements.Where(item => item.Tipo == "Cobro" && item.Metodo == method.Nombre).Sum(item => item.Monto), method.EsEfectivo)).ToList();
-        return new(shift, cashIn, cashOut, nonCash, payments, shift.MontoInicial + cashIn - cashOut, methods);
+        return new CashDeskShiftSummary(shift, cashIn, cashOut, nonCash, payments, shift.MontoInicial + cashIn - cashOut - cashCancellations, methods) { EfectivoAnulaciones = cashCancellations };
     }
 
     public IReadOnlyList<CashMovementRow> ListarMovimientos(int turnoId, string tipo = "Todos", string busqueda = "", string? metodo = null)
@@ -70,6 +71,7 @@ public sealed class CajaService
         var shifts = SampleData.TurnosCaja.AsEnumerable();
         if (user?.Rol != "Gerente") shifts = shifts.Where(item => item.UsuarioId == user?.Id);
         if (filtro == "Cerrados") shifts = shifts.Where(item => item.Estado == "Cerrado");
+        else if (filtro == "Abiertos") shifts = shifts.Where(item => item.Estado == "Abierto");
         return shifts.Where(item => string.IsNullOrWhiteSpace(busqueda) || item.Id.ToString().Contains(busqueda, StringComparison.OrdinalIgnoreCase) || SampleData.Usuarios.FirstOrDefault(userItem => userItem.Id == item.UsuarioId)?.Nombre.Contains(busqueda, StringComparison.OrdinalIgnoreCase) == true)
             .OrderByDescending(item => item.Apertura).ToList();
     }
@@ -141,7 +143,7 @@ public sealed class FolioService
         var charges = SampleData.Cargos.Where(item => item.FolioId == folioId && !item.Anulado).Sum(item => item.Monto);
         var payments = SampleData.Pagos.Where(item => item.FolioId == folioId && item.Estado != "Anulado").Sum(item => item.Monto);
         var refunds = SampleData.Devoluciones.Where(item => item.Estado == "Ejecutada" && SampleData.Pagos.FirstOrDefault(payment => payment.Id == item.PagoId)?.FolioId == folioId).Sum(item => item.Monto);
-        return Math.Max(0, charges - payments + refunds);
+        return charges - payments + refunds;
     }
     public IReadOnlyList<FolioLine> ConsultarMovimientos(int guestId) => SampleData.Folios.Where(item => ObtenerGuestId(item) == guestId).SelectMany(item => ConsultarMovimientosPorFolio(item.Id)).OrderByDescending(item => item.Fecha).ToList();
     public IReadOnlyList<FolioLine> ConsultarMovimientosPorEstancia(int estanciaId)
@@ -340,6 +342,7 @@ public sealed class CorreccionFinancieraService
         if (!NavigationService.Puede("Caja y facturación")) throw new UnauthorizedAccessException("Tu rol no puede solicitar devoluciones.");
         var payment = new PagoService().Obtener(pagoId);
         if (payment.Estado == "Anulado") throw new InvalidOperationException("Un pago anulado no admite devoluciones.");
+        if (SampleData.Anulaciones.Any(item => item.PagoId == pagoId && item.Estado is "Pendiente" or "Autorizada" or "Ejecutada")) throw new InvalidOperationException("El pago tiene una solicitud de anulación abierta o ejecutada; no se puede solicitar también una devolución.");
         if (monto <= 0 || string.IsNullOrWhiteSpace(motivo)) throw new InvalidOperationException("Indica un importe y un motivo válido.");
         var reserved = SampleData.Devoluciones.Where(item => item.PagoId == pagoId && item.Estado is "Solicitada" or "Pendiente" or "Autorizada" or "Ejecutada").Sum(item => item.Monto);
         if (monto + reserved > payment.Monto) throw new InvalidOperationException("El importe solicitado supera el saldo disponible para devolver.");
@@ -355,7 +358,7 @@ public sealed class CorreccionFinancieraService
         var user = SesionActual.Usuario ?? throw new UnauthorizedAccessException();
         if (!NavigationService.Puede("Caja y facturación")) throw new UnauthorizedAccessException("Tu rol no puede solicitar anulaciones.");
         var payment = new PagoService().Obtener(pagoId);
-        if (payment.Estado == "Anulado" || SampleData.Devoluciones.Any(item => item.PagoId == pagoId && item.Estado is "Ejecutada" or "Autorizada")) throw new InvalidOperationException("El pago tiene una corrección incompatible o ya fue anulado.");
+        if (payment.Estado == "Anulado" || SampleData.Devoluciones.Any(item => item.PagoId == pagoId && item.Estado is "Pendiente" or "Autorizada" or "Ejecutada")) throw new InvalidOperationException("El pago tiene una corrección incompatible o ya fue anulado.");
         if (string.IsNullOrWhiteSpace(motivo)) throw new InvalidOperationException("Indica un motivo para solicitar la anulación.");
         if (SampleData.Anulaciones.Any(item => item.PagoId == pagoId && item.Estado is "Pendiente" or "Solicitada" or "Autorizada")) throw new InvalidOperationException("Ya existe una solicitud de anulación abierta para este pago.");
         var request = new AnulacionModel(Persistencia.SiguienteId("anulacion", "anulacion_id", () => NextId(SampleData.Anulaciones.Select(item => item.Id))), pagoId, motivo.Trim(), "Pendiente") { Solicitada = DateTime.Now, UsuarioSolicitaId = user.Id, Descripcion = descripcion.Trim() };
@@ -365,9 +368,11 @@ public sealed class CorreccionFinancieraService
         return request;
     }
     public void AutorizarDevolucion(int id) => ActualizarDevolucion(id, true);
-    public void RechazarDevolucion(int id) => ActualizarDevolucion(id, false);
+    public void RechazarDevolucion(int id) => RechazarDevolucion(id, "Revisada desde el panel de decisiones.");
+    public void RechazarDevolucion(int id, string motivo) => ActualizarDevolucion(id, false, motivo);
     public void AutorizarAnulacion(int id) => ActualizarAnulacion(id, true);
-    public void RechazarAnulacion(int id) => ActualizarAnulacion(id, false);
+    public void RechazarAnulacion(int id) => RechazarAnulacion(id, "Revisada desde el panel de decisiones.");
+    public void RechazarAnulacion(int id, string motivo) => ActualizarAnulacion(id, false, motivo);
     public IReadOnlyList<CorrectionDirectoryRow> Listar(string estado = "Todos")
     {
         var result = new List<CorrectionDirectoryRow>();
@@ -378,14 +383,16 @@ public sealed class CorreccionFinancieraService
             var guestId = folio is null ? 0 : folio.HuespedPrincipalId ?? (folio.EstanciaId is int sid ? SampleData.Estancias.FirstOrDefault(value => value.Id == sid)?.HuespedId : null) ?? 0;
             var requester = SampleData.Usuarios.FirstOrDefault(value => value.Id == item.UsuarioSolicitaId)?.Nombre ?? "—";
             var approver = item.UsuarioAutorizaId is int aid ? SampleData.Usuarios.FirstOrDefault(value => value.Id == aid)?.Nombre ?? "—" : "—";
-            result.Add(new(item.Id, "Devolución", SampleData.Huespedes.FirstOrDefault(value => value.Id == guestId)?.Nombre ?? "—", item.PagoId, payment?.FolioId ?? 0, item.Monto, payment?.Metodo ?? "—", item.Motivo, item.Estado, requester, approver, item.Solicitada, item.Estado == "Autorizada"));
+            result.Add(new CorrectionDirectoryRow(item.Id, "Devolución", SampleData.Huespedes.FirstOrDefault(value => value.Id == guestId)?.Nombre ?? "—", item.PagoId, payment?.FolioId ?? 0, item.Monto, payment?.Metodo ?? "—", item.Motivo, item.Estado, requester, approver, item.Solicitada, item.Estado == "Autorizada")
+            { MotivoRechazo = item.MotivoRechazo, Descripcion = item.Descripcion, FechaPago = payment?.Fecha, Ejecutada = item.Ejecutada, EjecutadoPor = SampleData.Usuarios.FirstOrDefault(value => value.Id == item.UsuarioEjecutorId)?.Nombre ?? "—", PagoOriginal = payment?.Monto ?? 0m });
         }
         foreach (var item in SampleData.Anulaciones)
         {
             var payment = SampleData.Pagos.FirstOrDefault(value => value.Id == item.PagoId);
             var folio = payment is null ? null : SampleData.Folios.FirstOrDefault(value => value.Id == payment.FolioId);
             var guestId = folio is null ? 0 : folio.HuespedPrincipalId ?? (folio.EstanciaId is int sid ? SampleData.Estancias.FirstOrDefault(value => value.Id == sid)?.HuespedId : null) ?? 0;
-            result.Add(new(item.Id, "Anulación", SampleData.Huespedes.FirstOrDefault(value => value.Id == guestId)?.Nombre ?? "—", item.PagoId, payment?.FolioId ?? 0, payment?.Monto ?? 0, payment?.Metodo ?? "—", item.Motivo, item.Estado, SampleData.Usuarios.FirstOrDefault(value => value.Id == item.UsuarioSolicitaId)?.Nombre ?? "—", item.UsuarioAutorizaId is int aid ? SampleData.Usuarios.FirstOrDefault(value => value.Id == aid)?.Nombre ?? "—" : "—", item.Solicitada, item.Estado == "Autorizada"));
+            result.Add(new CorrectionDirectoryRow(item.Id, "Anulación", SampleData.Huespedes.FirstOrDefault(value => value.Id == guestId)?.Nombre ?? "—", item.PagoId, payment?.FolioId ?? 0, payment?.Monto ?? 0, payment?.Metodo ?? "—", item.Motivo, item.Estado, SampleData.Usuarios.FirstOrDefault(value => value.Id == item.UsuarioSolicitaId)?.Nombre ?? "—", item.UsuarioAutorizaId is int aid ? SampleData.Usuarios.FirstOrDefault(value => value.Id == aid)?.Nombre ?? "—" : "—", item.Solicitada, item.Estado == "Autorizada")
+            { MotivoRechazo = item.MotivoRechazo, Descripcion = item.Descripcion, FechaPago = payment?.Fecha, Ejecutada = item.Ejecutada, EjecutadoPor = SampleData.Usuarios.FirstOrDefault(value => value.Id == item.UsuarioEjecutorId)?.Nombre ?? "—", PagoOriginal = payment?.Monto ?? 0m });
         }
         return result.Where(item => estado is "Todos" or "Todos los estados" || item.Estado == estado).OrderByDescending(item => item.Fecha).ToList();
     }
@@ -401,7 +408,7 @@ public sealed class CorreccionFinancieraService
         var payment = new PagoService().Obtener(request.PagoId);
         var alreadyRefunded = SampleData.Devoluciones.Where(item => item.PagoId == payment.Id && item.Estado == "Ejecutada").Sum(item => item.Monto);
         if (alreadyRefunded + request.Monto > payment.Monto || payment.Estado == "Anulado") throw new InvalidOperationException("El pago ya no admite esta devolución.");
-        var updated = request with { Estado = "Ejecutada", Ejecutada = DateTime.Now, TurnoEjecucionId = shift.Id, MetodoEjecucion = payment.Metodo, Descripcion = string.IsNullOrWhiteSpace(observaciones) ? request.Descripcion : $"{request.Descripcion} · Ejecución: {observaciones.Trim()}" };
+        var updated = request with { Estado = "Ejecutada", Ejecutada = DateTime.Now, TurnoEjecucionId = shift.Id, UsuarioEjecutorId = user.Id, MetodoEjecucion = payment.Metodo, Descripcion = string.IsNullOrWhiteSpace(observaciones) ? request.Descripcion : $"{request.Descripcion} · Ejecución: {observaciones.Trim()}" };
         var refundMovement = new MovimientoCajaModel(Persistencia.SiguienteId("movimiento_caja", "movimiento_id", () => NextId(SampleData.MovimientosCaja.Select(item => item.Id))), shift.Id, updated.Ejecutada.Value, "Devolución", updated.Monto, updated.Motivo)
         { PagoId = payment.Id, FolioId = payment.FolioId, Metodo = payment.Metodo, UsuarioId = user.Id, CorreccionId = updated.Id };
         CajaRepositorio.EjecutarDevolucion(updated, refundMovement, alreadyRefunded + updated.Monto >= payment.Monto ? "Devuelto" : "Parcialmente devuelto", user.Id);
@@ -411,6 +418,8 @@ public sealed class CorreccionFinancieraService
         var paymentIndex = SampleData.Pagos.FindIndex(item => item.Id == payment.Id);
         SampleData.Pagos[paymentIndex] = payment with { Estado = refunded >= payment.Monto ? "Devuelto" : "Parcialmente devuelto" };
         SampleData.Movimientos.Insert(0, new(updated.Ejecutada.Value, "Devolución", updated.Motivo, updated.Monto, payment.Metodo, GuestFor(payment.FolioId)) { TurnoCajaId = shift.Id, PagoId = payment.Id, FolioId = payment.FolioId });
+        var folioIndex = SampleData.Folios.FindIndex(item => item.Id == payment.FolioId);
+        if (folioIndex >= 0) SampleData.Folios[folioIndex] = SampleData.Folios[folioIndex] with { Saldo = new FolioService().CalcularSaldoFolio(payment.FolioId) };
         return updated;
     }
     public AnulacionModel EjecutarAnulacion(int id, string observaciones)
@@ -424,7 +433,7 @@ public sealed class CorreccionFinancieraService
         var shift = new CajaService().ObtenerTurnoActual(user.Id) ?? throw new InvalidOperationException("Abre tu turno para ejecutar la anulación.");
         var payment = new PagoService().Obtener(request.PagoId);
         if (payment.Estado == "Anulado" || SampleData.Devoluciones.Any(item => item.PagoId == payment.Id && item.Estado == "Ejecutada")) throw new InvalidOperationException("El pago ya tiene una corrección ejecutada.");
-        var updated = request with { Estado = "Ejecutada", Ejecutada = DateTime.Now, TurnoEjecucionId = shift.Id, Descripcion = string.IsNullOrWhiteSpace(observaciones) ? request.Descripcion : $"{request.Descripcion} · Ejecución: {observaciones.Trim()}" };
+        var updated = request with { Estado = "Ejecutada", Ejecutada = DateTime.Now, TurnoEjecucionId = shift.Id, UsuarioEjecutorId = user.Id, Descripcion = string.IsNullOrWhiteSpace(observaciones) ? request.Descripcion : $"{request.Descripcion} · Ejecución: {observaciones.Trim()}" };
         var voidMovement = new MovimientoCajaModel(Persistencia.SiguienteId("movimiento_caja", "movimiento_id", () => NextId(SampleData.MovimientosCaja.Select(item => item.Id))), shift.Id, updated.Ejecutada.Value, "Anulación", payment.Monto, updated.Motivo)
         { PagoId = payment.Id, FolioId = payment.FolioId, Metodo = payment.Metodo, UsuarioId = user.Id, CorreccionId = updated.Id };
         CajaRepositorio.EjecutarAnulacion(updated, voidMovement, user.Id);
@@ -433,9 +442,11 @@ public sealed class CorreccionFinancieraService
         SampleData.Pagos[paymentIndex] = payment with { Estado = "Anulado" };
         SampleData.MovimientosCaja.Add(voidMovement);
         SampleData.Movimientos.Insert(0, new(updated.Ejecutada.Value, "Anulación", updated.Motivo, payment.Monto, payment.Metodo, GuestFor(payment.FolioId)) { TurnoCajaId = shift.Id, PagoId = payment.Id, FolioId = payment.FolioId });
+        var folioIndex = SampleData.Folios.FindIndex(item => item.Id == payment.FolioId);
+        if (folioIndex >= 0) SampleData.Folios[folioIndex] = SampleData.Folios[folioIndex] with { Saldo = new FolioService().CalcularSaldoFolio(payment.FolioId) };
         return updated;
     }
-    private static void ActualizarDevolucion(int id, bool approve)
+    private static void ActualizarDevolucion(int id, bool approve, string rejectionReason = "")
     {
         var user = SesionActual.Usuario ?? throw new UnauthorizedAccessException();
         if (!NavigationService.Puede("Finanzas")) throw new UnauthorizedAccessException("Solo Gerencia puede revisar solicitudes financieras.");
@@ -444,11 +455,20 @@ public sealed class CorreccionFinancieraService
         var request = SampleData.Devoluciones[index];
         if (request.Estado != "Pendiente") throw new InvalidOperationException("La solicitud ya fue revisada.");
         if (request.UsuarioSolicitaId == user.Id) throw new UnauthorizedAccessException("No puedes autorizar una solicitud que tú mismo presentaste.");
-        var reviewed = request with { Estado = approve ? "Autorizada" : "Rechazada", UsuarioAutorizaId = user.Id, FechaAutorizacion = DateTime.Now };
-        CajaRepositorio.RevisarCorreccion("devolucion", id, reviewed.Estado, user.Id, reviewed.FechaAutorizacion!.Value);
+        var payment = new PagoService().Obtener(request.PagoId);
+        if (approve)
+        {
+            if (payment.Estado == "Anulado" || SampleData.Anulaciones.Any(item => item.PagoId == payment.Id && item.Estado is "Pendiente" or "Autorizada" or "Ejecutada"))
+                throw new InvalidOperationException("Este pago tiene una anulación abierta o ejecutada; no se puede aprobar también una devolución.");
+            var committed = SampleData.Devoluciones.Where(item => item.PagoId == payment.Id && item.Id != id && item.Estado is "Autorizada" or "Ejecutada").Sum(item => item.Monto);
+            if (committed + request.Monto > payment.Monto) throw new InvalidOperationException("La devolución, junto con las correcciones ya aprobadas, supera el pago disponible.");
+        }
+        if (!approve && string.IsNullOrWhiteSpace(rejectionReason)) throw new InvalidOperationException("Escribe el motivo del rechazo.");
+        var reviewed = request with { Estado = approve ? "Autorizada" : "Rechazada", UsuarioAutorizaId = user.Id, FechaAutorizacion = DateTime.Now, MotivoRechazo = approve ? "" : rejectionReason.Trim() };
+        CajaRepositorio.RevisarCorreccion("devolucion", id, reviewed.Estado, user.Id, reviewed.FechaAutorizacion.Value);
         SampleData.Devoluciones[index] = reviewed;
     }
-    private static void ActualizarAnulacion(int id, bool approve)
+    private static void ActualizarAnulacion(int id, bool approve, string rejectionReason = "")
     {
         var user = SesionActual.Usuario ?? throw new UnauthorizedAccessException();
         if (!NavigationService.Puede("Finanzas")) throw new UnauthorizedAccessException("Solo Gerencia puede revisar solicitudes financieras.");
@@ -457,8 +477,11 @@ public sealed class CorreccionFinancieraService
         var request = SampleData.Anulaciones[index];
         if (request.Estado != "Pendiente") throw new InvalidOperationException("La solicitud ya fue revisada.");
         if (request.UsuarioSolicitaId == user.Id) throw new UnauthorizedAccessException("No puedes autorizar una solicitud que tú mismo presentaste.");
-        var reviewed = request with { Estado = approve ? "Autorizada" : "Rechazada", UsuarioAutorizaId = user.Id, FechaAutorizacion = DateTime.Now };
-        CajaRepositorio.RevisarCorreccion("anulacion", id, reviewed.Estado, user.Id, reviewed.FechaAutorizacion!.Value);
+        if (approve && SampleData.Devoluciones.Any(item => item.PagoId == request.PagoId && item.Estado is "Pendiente" or "Autorizada" or "Ejecutada"))
+            throw new InvalidOperationException("Este pago tiene una devolución abierta o ejecutada; no se puede aprobar también una anulación.");
+        if (!approve && string.IsNullOrWhiteSpace(rejectionReason)) throw new InvalidOperationException("Escribe el motivo del rechazo.");
+        var reviewed = request with { Estado = approve ? "Autorizada" : "Rechazada", UsuarioAutorizaId = user.Id, FechaAutorizacion = DateTime.Now, MotivoRechazo = approve ? "" : rejectionReason.Trim() };
+        CajaRepositorio.RevisarCorreccion("anulacion", id, reviewed.Estado, user.Id, reviewed.FechaAutorizacion.Value);
         SampleData.Anulaciones[index] = reviewed;
     }
     private static int GuestFor(int folioId)

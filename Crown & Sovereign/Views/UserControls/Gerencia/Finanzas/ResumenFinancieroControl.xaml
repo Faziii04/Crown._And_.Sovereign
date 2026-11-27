@@ -1,1 +1,49 @@
-<UserControl x:Class="Crown___Sovereign.Views.UserControls.Gerencia.Finanzas.ResumenFinancieroControl" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"><StackPanel Margin="16"><TextBlock Text="Resumen del periodo" FontSize="19" FontWeight="SemiBold"/><UniformGrid Columns="3" Margin="0,14"><Border Background="White" Padding="16" Margin="4"><StackPanel><TextBlock Text="Ingresos registrados" Foreground="{StaticResource Muted}"/><TextBlock x:Name="RevenueText" FontSize="23" FontWeight="SemiBold"/></StackPanel></Border><Border Background="White" Padding="16" Margin="4"><StackPanel><TextBlock Text="Pagos" Foreground="{StaticResource Muted}"/><TextBlock x:Name="PaymentsText" FontSize="23" FontWeight="SemiBold"/></StackPanel></Border><Border Background="White" Padding="16" Margin="4"><StackPanel><TextBlock Text="Turno de caja" Foreground="{StaticResource Muted}"/><TextBlock x:Name="CashText" FontSize="23" FontWeight="SemiBold"/></StackPanel></Border></UniformGrid><TextBlock Text="Totales calculados desde los movimientos compartidos de la muestra." Foreground="{StaticResource Muted}"/></StackPanel></UserControl>
+<UserControl x:Class="Crown___Sovereign.Views.UserControls.Gerencia.Finanzas.ResumenFinancieroControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="10,8,10,16">
+            <TextBlock Text="Resumen financiero" FontSize="19" FontWeight="SemiBold"/>
+            <UniformGrid Columns="4" Margin="-4,8,-4,8">
+                <Border Background="White" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="6" Padding="12" Margin="4"><StackPanel><TextBlock Text="Cobros brutos" Foreground="{StaticResource Muted}"/><TextBlock x:Name="GrossText" FontSize="19" FontWeight="SemiBold"/><TextBlock Text="Pagos registrados en el periodo" FontSize="11" Foreground="{StaticResource Muted}"/></StackPanel></Border>
+                <Border Background="White" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="6" Padding="12" Margin="4"><StackPanel><TextBlock Text="Devoluciones ejecutadas" Foreground="{StaticResource Muted}"/><TextBlock x:Name="RefundText" FontSize="19" FontWeight="SemiBold"/><TextBlock Text="En su fecha de ejecución" FontSize="11" Foreground="{StaticResource Muted}"/></StackPanel></Border>
+                <Border Background="White" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="6" Padding="12" Margin="4"><StackPanel><TextBlock Text="Anulaciones ejecutadas" Foreground="{StaticResource Muted}"/><TextBlock x:Name="CancellationText" FontSize="19" FontWeight="SemiBold"/><TextBlock Text="Reversos de pagos; separados de cargos" FontSize="11" Foreground="{StaticResource Muted}"/></StackPanel></Border>
+                <Border Background="White" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="6" Padding="12" Margin="4"><StackPanel><TextBlock Text="Cobros netos" Foreground="{StaticResource Muted}"/><TextBlock x:Name="NetText" FontSize="19" FontWeight="SemiBold"/><TextBlock x:Name="ComparisonText" FontSize="11" Foreground="{StaticResource Muted}"/></StackPanel></Border>
+            </UniformGrid>
+            <Grid Margin="-4,0,-4,8">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="1.3*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <Border Background="White" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="6" Padding="12" Margin="4">
+                    <StackPanel>
+                        <TextBlock Text="Cargos y cobros por intervalo" FontSize="15" FontWeight="SemiBold"/>
+                        <TextBlock Text="Los cobros reflejan pagos; el fondo inicial de caja no se considera ingreso." FontSize="11" Foreground="{StaticResource Muted}" Margin="0,2,0,8"/>
+                        <ItemsControl x:Name="TrendList">
+                            <ItemsControl.ItemTemplate><DataTemplate>
+                                <Grid Margin="0,3">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="48"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding Label}" VerticalAlignment="Center" FontSize="11"/>
+                                    <StackPanel Grid.Column="1" Margin="4,0"><TextBlock Text="{Binding Charges, StringFormat='Cargos · Bs {0:N2}'}" FontSize="10" Foreground="{StaticResource Muted}"/><ProgressBar Height="7" Maximum="100" Value="{Binding ChargesPercent}" Foreground="{StaticResource Primary}"/></StackPanel>
+                                    <StackPanel Grid.Column="2" Margin="4,0"><TextBlock Text="{Binding Collections, StringFormat='Cobros · Bs {0:N2}'}" FontSize="10" Foreground="{StaticResource Muted}"/><ProgressBar Height="7" Maximum="100" Value="{Binding CollectionsPercent}" Foreground="{StaticResource Success}"/></StackPanel>
+                                </Grid>
+                            </DataTemplate></ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="1" Background="White" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="6" Padding="12" Margin="4">
+                    <StackPanel><TextBlock Text="Cobros por método" FontSize="15" FontWeight="SemiBold"/><TextBlock Text="Importes brutos del periodo; la devolución se consulta aparte." FontSize="11" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,2,0,8"/>
+                        <ItemsControl x:Name="PaymentMethodsList"><ItemsControl.ItemTemplate><DataTemplate><Grid Margin="0,4"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="{Binding Name}" FontWeight="SemiBold"/><TextBlock Text="{Binding CashLabel}" FontSize="10" Foreground="{StaticResource Muted}"/></StackPanel><TextBlock Grid.Column="1" Text="{Binding Amount, StringFormat='Bs {0:N2}'}" VerticalAlignment="Center"/></Grid></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+                    </StackPanel>
+                </Border>
+            </Grid>
+            <Grid Margin="-4,0,-4,4">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <Border Background="White" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="6" Padding="12" Margin="4">
+                    <StackPanel><TextBlock Text="Situación financiera actual" FontSize="15" FontWeight="SemiBold"/><TextBlock Text="No cambia al consultar periodos históricos." FontSize="11" Foreground="{StaticResource Muted}" Margin="0,2,0,6"/><UniformGrid Columns="2"><TextBlock x:Name="CurrentBalancesText" Margin="0,4"/><TextBlock x:Name="PendingText" Margin="0,4"/><TextBlock x:Name="ExecutionText" Margin="0,4"/><TextBlock x:Name="OpenShiftsText" Margin="0,4"/><TextBlock x:Name="ClosuresText" Margin="0,4"/><TextBlock x:Name="InvoiceText" Margin="0,4"/></UniformGrid></StackPanel>
+                </Border>
+                <Border Grid.Column="1" Background="White" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="6" Padding="12" Margin="4">
+                    <StackPanel><TextBlock Text="Revisión de consistencia" FontSize="15" FontWeight="SemiBold"/><TextBlock Text="Señala diferencias para consulta; nunca corrige registros automáticamente." FontSize="11" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,2,0,6"/><ItemsControl x:Name="DiagnosticsList"><ItemsControl.ItemTemplate><DataTemplate><StackPanel Margin="0,4"><TextBlock Text="{Binding Reference}" FontWeight="SemiBold"/><TextBlock Text="{Binding Description}" FontSize="11" Foreground="{StaticResource Muted}" TextWrapping="Wrap"/></StackPanel></DataTemplate></ItemsControl.ItemTemplate></ItemsControl><TextBlock x:Name="NoDiagnosticsText" Text="No se encontraron diferencias en los registros consultados." Foreground="{StaticResource Muted}" Visibility="Collapsed"/></StackPanel>
+                </Border>
+            </Grid>
+            <TextBlock x:Name="UnsupportedCategoryNote" Foreground="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="4,4,4,0"/>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

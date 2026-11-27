@@ -18,6 +18,7 @@ public static class CargadorBaseDatos
         {
             LimpiarDemostracion();
             CargarCatalogos();
+            CargarPoliticas();
             CargarHuespedesYHabitaciones();
             CargarReservas(null);
             CargarComplementos();
@@ -39,10 +40,34 @@ public static class CargadorBaseDatos
         SampleData.Promociones.Clear();
         SampleData.Convenios.Clear();
         SampleData.Politicas.Clear();
+        SampleData.PoliticasServicio.Clear();
+        SampleData.HistorialPoliticas.Clear();
         SampleData.MetodosPago.Clear();
         SampleData.Tarifas.Clear();
         SampleData.AperturaCaja = 0m;
         SampleData.CajaAbierta = false;
+    }
+
+    private static void CargarPoliticas()
+    {
+        var hotelId = Convert.ToInt32(DatabaseConnection.Escalar("SELECT hotel_id FROM public.hotel ORDER BY hotel_id LIMIT 1")
+            ?? throw new InvalidOperationException("No se encontró un hotel para cargar sus políticas."));
+        SampleData.Politicas.AddRange(DatabaseConnection.Consultar(
+            "SELECT politica_id, nombre, COALESCE(descripcion, ''), COALESCE(valor, '') FROM public.politica WHERE hotel_id = @hotel ORDER BY politica_id",
+            l => new PoliticaModel(l.GetInt32(0), l.GetString(1), l.GetString(2), l.GetString(3)), DatabaseConnection.Parametro("hotel", hotelId)));
+
+        SampleData.PoliticasServicio.AddRange(DatabaseConnection.Consultar(@"SELECT hotel_id, horas_cancelacion_gratuita,
+                tipo_penalizacion_inasistencia, valor_penalizacion_inasistencia, tipo_penalizacion_cancelacion,
+                valor_penalizacion_cancelacion, consumir_beneficio_inasistencia, consumir_beneficio_cancelacion_tardia
+            FROM public.politica_servicio WHERE hotel_id = @hotel",
+            l => new PoliticaServicioModel(l.GetInt32(0), l.GetInt32(1), l.GetString(2), l.GetDecimal(3), l.GetString(4), l.GetDecimal(5), l.GetBoolean(6), l.GetBoolean(7)),
+            DatabaseConnection.Parametro("hotel", hotelId)));
+
+        SampleData.HistorialPoliticas.AddRange(DatabaseConnection.Consultar(@"SELECT audit_id, hotel_id, usuario_id, cambio,
+                COALESCE(valor_anterior, ''), COALESCE(valor_nuevo, ''), fecha FROM public.configuracion_audit
+            WHERE hotel_id = @hotel ORDER BY fecha DESC LIMIT 500",
+            l => new ConfiguracionAuditModel(l.GetInt32(0), l.GetInt32(1), l.GetInt32(2), l.GetString(3), l.GetString(4), l.GetString(5), l.GetDateTime(6)),
+            DatabaseConnection.Parametro("hotel", hotelId)));
     }
 
     private static void CargarCatalogos()
@@ -377,10 +402,10 @@ public static class CargadorBaseDatos
             });
         }
 
-        var citas = DatabaseConnection.Consultar(@"SELECT c.cita_id, c.reserva_servicio_id, c.fecha_hora, COALESCE(c.duracion, 60), COALESCE(c.estado, 'SOLICITADA'), c.empleado_id, c.fecha_cancelacion, c.motivo_cancelacion
+        var citas = DatabaseConnection.Consultar(@"SELECT c.cita_id, c.reserva_servicio_id, c.fecha_hora, COALESCE(c.duracion, 60), COALESCE(c.estado, 'SOLICITADA'), c.empleado_id, c.fecha_cancelacion, c.motivo_cancelacion, c.politica_aplicada::text
                                                   FROM public.cita_servicio c ORDER BY c.cita_id",
             l => new { Id = l.GetInt32(0), Solicitud = l.GetInt32(1), Inicio = l.GetDateTime(2), Duracion = l.GetInt32(3), Estado = l.GetString(4),
-                       Empleado = l.IsDBNull(5) ? (int?)null : l.GetInt32(5), Cancelada = l.IsDBNull(6) ? (DateTime?)null : l.GetDateTime(6), Motivo = Texto(l, 7) });
+                       Empleado = l.IsDBNull(5) ? (int?)null : l.GetInt32(5), Cancelada = l.IsDBNull(6) ? (DateTime?)null : l.GetDateTime(6), Motivo = Texto(l, 7), PolicySnapshot = Texto(l, 8) });
         var traslados = DatabaseConnection.Consultar("SELECT traslado_id, reserva_servicio_id, origen, destino, fecha_hora, COALESCE(estado, 'SOLICITADO'), COALESCE(pasajeros, 1) FROM public.traslado ORDER BY traslado_id",
             l => new { Id = l.GetInt32(0), Solicitud = l.GetInt32(1), Origen = l.GetString(2), Destino = l.GetString(3), Fecha = l.GetDateTime(4), Estado = l.GetString(5), Pasajeros = l.GetInt32(6) });
 
@@ -401,7 +426,7 @@ public static class CargadorBaseDatos
             if (cita is not null)
                 SampleData.Citas.Add(new CitaServicioModel(cita.Id, huesped, servicio.Id, cita.Inicio, cita.Inicio.AddMinutes(cita.Duracion),
                     SampleData.Empleados.FirstOrDefault(e => e.Id == cita.Empleado)?.Nombre ?? "Por asignar", Traducciones.EstadoSolicitudInterfaz(cita.Estado))
-                { EstanciaId = estancia.Id, SolicitudId = r.Id });
+                { EstanciaId = estancia.Id, SolicitudId = r.Id, PoliticaAplicadaJson = cita.PolicySnapshot ?? "" });
             if (traslado is not null)
                 SampleData.Traslados.Add(new TrasladoModel(traslado.Id, huesped, traslado.Origen, traslado.Destino, traslado.Fecha, Traducciones.Capitalizar(traslado.Estado))
                 { EstanciaId = estancia.Id, ServicioId = servicio.Id, SolicitudId = r.Id, Observaciones = r.Observaciones, Pasajeros = traslado.Pasajeros });
