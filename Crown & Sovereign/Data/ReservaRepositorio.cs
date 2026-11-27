@@ -43,6 +43,14 @@ public static class ReservaRepositorio
                     Parametro("id", habitacion.ReservaHabitacionId), Parametro("reserva", reservaId), Parametro("habitacion", habitacion.HabitacionId),
                     Parametro("entrada", reserva.Llegada.Date), Parametro("salida", reserva.Salida.Date));
 
+            foreach (var noche in reserva.AlojamientoNochesAcordadas)
+            {
+                var asignacion = SampleData.ReservaHabitaciones.FirstOrDefault(item => item.ReservaId == reservaId && item.HabitacionId == noche.HabitacionId);
+                if (asignacion is null) continue;
+                Ejecutar(conexion, transaccion, "INSERT INTO public.reserva_habitacion_noche (reserva_habitacion_id, noche, precio) VALUES (@asignacion, @noche, @precio) ON CONFLICT DO NOTHING",
+                    Parametro("asignacion", asignacion.ReservaHabitacionId), Parametro("noche", noche.Noche.Date), Parametro("precio", noche.Precio));
+            }
+
             foreach (var vinculo in SampleData.ReservaHabitacionHuespedes.Where(item => item.ReservaId == reservaId))
                 Ejecutar(conexion, transaccion,
                     "INSERT INTO public.reserva_habitacion_huesped (reserva_habitacion_id, reserva_id, huesped_id) VALUES (@habitacion, @reserva, @huesped)",

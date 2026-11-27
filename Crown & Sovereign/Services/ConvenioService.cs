@@ -75,7 +75,7 @@ public sealed class ConvenioService
         var current = id is int existing ? AsegurarConvenio(existing) : null;
         if (id is int agreementId && SampleData.ConveniosServicios.Where(item => item.ConvenioId == agreementId).GroupBy(item => item.ServicioId).Any(group => group.Count() > 1))
             throw new InvalidOperationException("Hay asociaciones convenio-servicio duplicadas. Corrige los datos antes de editar este convenio.");
-        var saved = new ConvenioModel(id ?? NuevoId(SampleData.Convenios.Select(item => item.Id)), empresa.Trim(), categoria.Trim(), desde.Date, hasta.Date, activo,
+        var saved = new ConvenioModel(id ?? Persistencia.SiguienteId("convenio", "convenio_id", () => NuevoId(SampleData.Convenios.Select(item => item.Id))), empresa.Trim(), categoria.Trim(), desde.Date, hasta.Date, activo,
             nombre.Trim(), descripcion.Trim(), contacto.Trim(), telefono.Trim(), email.Trim(), direccion.Trim(), condiciones.Trim(), logoUrl.Trim());
         if (current is null) SampleData.Convenios.Add(saved);
         else SampleData.Convenios[SampleData.Convenios.IndexOf(current)] = saved;
@@ -94,6 +94,7 @@ public sealed class ConvenioService
             if (link.ConvenioId == saved.Id && !selectedIds.Contains(link.ServicioId) && link.Activo)
                 SampleData.ConveniosServicios[i] = link with { Activo = false };
         }
+        ComercialRepositorio.GuardarConvenio(saved.Id);
         Registrar(id is null ? "Creación de convenio externo" : "Actualización de convenio externo", $"{saved.Empresa} · {saved.Nombre}");
         return saved;
     }
@@ -117,6 +118,7 @@ public sealed class ConvenioService
             if (affected.Count > 0) throw new InvalidOperationException($"No se puede desactivar: hay {affected.Count} solicitud(es) pendiente(s) asignada(s) a este convenio. Cambia su proveedor o resuélvelas primero.");
         }
         SampleData.Convenios[SampleData.Convenios.IndexOf(agreement)] = agreement with { Activo = activo };
+        ComercialRepositorio.GuardarConvenio(id);
         Registrar(activo ? "Activación de convenio" : "Desactivación de convenio", $"{agreement.Empresa} · {agreement.Nombre}");
     }
 
@@ -126,6 +128,7 @@ public sealed class ConvenioService
         var matches = SampleData.ConveniosServicios.Select((item, index) => (item, index)).Where(pair => pair.item.ConvenioId == convenioId && pair.item.ServicioId == servicioId).ToList();
         if (matches.Count != 1) throw new InvalidOperationException("La asociación convenio-servicio no existe o está duplicada.");
         SampleData.ConveniosServicios[matches[0].index] = matches[0].item with { Activo = activo };
+        ComercialRepositorio.GuardarConvenio(convenioId);
     }
 
     public IReadOnlyList<ConvenioUsoFila> Rendimiento(DateTime desde, DateTime hasta, int? convenioId = null)
@@ -178,6 +181,7 @@ public sealed class ConvenioService
             throw new InvalidOperationException("No se puede eliminar: el convenio conserva operaciones históricas. Desactívalo para impedir nuevas asignaciones.");
         if (SampleData.ConveniosServicios.Any(item => item.ConvenioId == id)) throw new InvalidOperationException("No se puede eliminar: el convenio conserva asociaciones de servicios. Desactívalo para nuevas operaciones.");
         SampleData.Convenios.Remove(agreement);
+        ComercialRepositorio.EliminarConvenio(id);
     }
 
     public static bool EsVigente(ConvenioModel item, DateTime fecha) => item.Activo && item.VigenciaDesde.Date <= fecha.Date && item.VigenciaHasta.Date >= fecha.Date;
@@ -211,6 +215,7 @@ public sealed class ConvenioService
     {
         if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(company) || string.IsNullOrWhiteSpace(category)) throw new InvalidOperationException("Completa el nombre del convenio, la empresa y el tipo de proveedor.");
         if (to.Date < from.Date) throw new InvalidOperationException("La vigencia final no puede ser anterior a la inicial.");
+        if (id is null && to.Date < DateTime.Today) throw new InvalidOperationException("No se puede crear un convenio con vigencia pasada: debe vencer hoy o más adelante.");
         if (!string.IsNullOrWhiteSpace(email) && !email.Contains('@')) throw new InvalidOperationException("Escribe un correo de contacto válido.");
         if (!string.IsNullOrWhiteSpace(logo) && (!Uri.TryCreate(logo, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https"))) throw new InvalidOperationException("El logo debe usar una URL http(s) completa.");
         if (services.Select(item => item.ServicioId).Distinct().Count() != services.Count) throw new InvalidOperationException("No repitas un servicio dentro del mismo convenio.");
@@ -227,5 +232,5 @@ public sealed class ConvenioService
     private static ConvenioModel AsegurarConvenio(int id) => SampleData.Convenios.FirstOrDefault(item => item.Id == id) ?? throw new InvalidOperationException("No se encontró el convenio.");
     private static int NuevoId(IEnumerable<int> ids) => ids.DefaultIfEmpty(0).Max() + 1;
     private static void Autorizar() { if (!NavigationService.Puede("Convenios")) throw new UnauthorizedAccessException("Solo el Gerente puede administrar convenios de proveedores."); }
-    private static void Registrar(string accion, string detalle) => SampleData.Auditoria.Insert(0, new(DateTime.Now, SesionActual.Usuario?.Usuario ?? "demo", accion, "—", detalle));
+    private static void Registrar(string accion, string detalle) => AuditoriaRepositorio.Registrar(new(DateTime.Now, SesionActual.Usuario?.Usuario ?? "demo", accion, "—", detalle));
 }

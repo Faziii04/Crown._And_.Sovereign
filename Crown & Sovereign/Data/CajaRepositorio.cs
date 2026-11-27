@@ -56,19 +56,26 @@ public static class CajaRepositorio
     public static void InsertarDevolucion(DevolucionModel devolucion)
     {
         if (!Persistencia.Activa) return;
-        Ejecutar(@"INSERT INTO public.devolucion (devolucion_id, pago_id, monto, motivo, fecha, estado, usuario_solicitante_id)
-                   VALUES (@id, @pago, @monto, @motivo, @fecha, @estado, @usuario)",
+        Ejecutar(@"INSERT INTO public.devolucion (devolucion_id, pago_id, monto, motivo, fecha, estado, usuario_solicitante_id, descripcion)
+                   VALUES (@id, @pago, @monto, @motivo, @fecha, @estado, @usuario, @descripcion)",
             Parametro("id", devolucion.Id), Parametro("pago", devolucion.PagoId), Parametro("monto", devolucion.Monto), Parametro("motivo", devolucion.Motivo),
-            Parametro("fecha", devolucion.Solicitada), Parametro("estado", Traducciones.EstadoCorreccionBase(devolucion.Estado)), Parametro("usuario", devolucion.UsuarioSolicitaId));
+            Parametro("fecha", devolucion.Solicitada), Parametro("estado", Traducciones.EstadoCorreccionBase(devolucion.Estado)), Parametro("usuario", devolucion.UsuarioSolicitaId), Parametro("descripcion", Persistencia.NuloSiVacio(devolucion.Descripcion)));
     }
 
     public static void InsertarAnulacion(AnulacionModel anulacion)
     {
         if (!Persistencia.Activa) return;
-        Ejecutar(@"INSERT INTO public.anulacion (anulacion_id, pago_id, motivo, fecha, estado, usuario_solicitante_id)
-                   VALUES (@id, @pago, @motivo, @fecha, @estado, @usuario)",
+        Ejecutar(@"INSERT INTO public.anulacion (anulacion_id, pago_id, motivo, fecha, estado, usuario_solicitante_id, descripcion)
+                   VALUES (@id, @pago, @motivo, @fecha, @estado, @usuario, @descripcion)",
             Parametro("id", anulacion.Id), Parametro("pago", anulacion.PagoId), Parametro("motivo", anulacion.Motivo),
-            Parametro("fecha", anulacion.Solicitada), Parametro("estado", Traducciones.EstadoCorreccionBase(anulacion.Estado)), Parametro("usuario", anulacion.UsuarioSolicitaId));
+            Parametro("fecha", anulacion.Solicitada), Parametro("estado", Traducciones.EstadoCorreccionBase(anulacion.Estado)), Parametro("usuario", anulacion.UsuarioSolicitaId), Parametro("descripcion", Persistencia.NuloSiVacio(anulacion.Descripcion)));
+    }
+
+    public static void RevisarCierre(int cierreId, int usuarioId, DateTime fecha)
+    {
+        if (!Persistencia.Activa) return;
+        Ejecutar("UPDATE public.cierre_caja SET usuario_revisor_id = @usuario, fecha_revision = @fecha WHERE cierre_id = @id",
+            Parametro("usuario", usuarioId), Parametro("fecha", fecha), Parametro("id", cierreId));
     }
 
     /// <summary>Guarda la revisión de Gerencia: autorizada o rechazada.</summary>

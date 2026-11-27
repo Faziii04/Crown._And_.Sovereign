@@ -161,7 +161,9 @@ public sealed class FinancialManagementService
         if (index < 0) throw new InvalidOperationException("No se encontró el cierre.");
         var closure = SampleData.CierresCaja[index];
         if (closure.FechaRevision is not null) throw new InvalidOperationException("Este cierre ya fue revisado.");
-        SampleData.CierresCaja[index] = closure with { UsuarioRevisorId = user.Id, FechaRevision = DateTime.Now };
+        var now = DateTime.Now;
+        CajaRepositorio.RevisarCierre(cierreId, user.Id, now);
+        SampleData.CierresCaja[index] = closure with { UsuarioRevisorId = user.Id, FechaRevision = now };
     }
 
     public static bool InRange(DateTime value, DateTime start, DateTime endExclusive) => value >= start && value < endExclusive;

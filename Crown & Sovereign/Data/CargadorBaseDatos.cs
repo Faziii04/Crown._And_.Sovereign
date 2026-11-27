@@ -20,6 +20,7 @@ public static class CargadorBaseDatos
             CargarCatalogos();
             CargarPoliticas();
             CargarHuespedesYHabitaciones();
+            ComercialRepositorio.CargarTarifas();
             CargarReservas(null);
             CargarComplementos();
             CargarEstancias();
@@ -66,7 +67,7 @@ public static class CargadorBaseDatos
         SampleData.HistorialPoliticas.AddRange(DatabaseConnection.Consultar(@"SELECT audit_id, hotel_id, usuario_id, cambio,
                 COALESCE(valor_anterior, ''), COALESCE(valor_nuevo, ''), fecha FROM public.configuracion_audit
             WHERE hotel_id = @hotel ORDER BY fecha DESC LIMIT 500",
-            l => new ConfiguracionAuditModel(l.GetInt32(0), l.GetInt32(1), l.GetInt32(2), l.GetString(3), l.GetString(4), l.GetString(5), l.GetDateTime(6)),
+            l => new ConfiguracionAuditModel(l.GetInt32(0), l.GetInt32(1), l.IsDBNull(2) ? 0 : l.GetInt32(2), l.GetString(3), l.GetString(4), l.GetString(5), l.GetDateTime(6)),
             DatabaseConnection.Parametro("hotel", hotelId)));
     }
 
@@ -98,15 +99,15 @@ public static class CargadorBaseDatos
                      l => new MetodoPagoModel(l.GetInt32(0), l.GetString(1), l.GetBoolean(2), l.GetBoolean(3))))
             SampleData.MetodosPago.Add(m);
 
-        var hotel = DatabaseConnection.Consultar("SELECT nombre, direccion, categoria FROM public.hotel ORDER BY hotel_id LIMIT 1",
-            l => new { Nombre = l.GetString(0), Direccion = Texto(l, 1), Categoria = l.IsDBNull(2) ? 0 : l.GetInt32(2) }).FirstOrDefault();
+        var hotel = DatabaseConnection.Consultar("SELECT nombre, direccion, categoria, telefono, email FROM public.hotel ORDER BY hotel_id LIMIT 1",
+            l => new { Nombre = l.GetString(0), Direccion = Texto(l, 1), Categoria = l.IsDBNull(2) ? 0 : l.GetInt32(2), Telefono = Texto(l, 3), Correo = Texto(l, 4) }).FirstOrDefault();
         if (hotel is not null)
         {
             SampleData.ConfiguracionHotel["Nombre"] = hotel.Nombre;
             SampleData.ConfiguracionHotel["Dirección"] = hotel.Direccion;
             SampleData.ConfiguracionHotel["Categoría"] = hotel.Categoria > 0 ? $"{hotel.Categoria} estrellas" : "";
-            SampleData.ConfiguracionHotel["Teléfono"] = "";
-            SampleData.ConfiguracionHotel["Correo"] = "";
+            SampleData.ConfiguracionHotel["Teléfono"] = hotel.Telefono ?? "";
+            SampleData.ConfiguracionHotel["Correo"] = hotel.Correo ?? "";
         }
     }
 
@@ -179,11 +180,12 @@ public static class CargadorBaseDatos
                 l => new ReservaHabitacionModel(l.GetInt32(0), l.GetInt32(1), l.GetInt32(2)), Clonar(filtro));
             SampleData.ReservaHabitaciones.AddRange(habitaciones);
 
-            foreach (var r in DatabaseConnection.Consultar(@"SELECT r.reserva_id, r.huesped_principal_id, c.nombre, r.fecha_entrada, r.fecha_salida, r.estado, r.grupo_id, r.cantidad_personas
+            foreach (var r in DatabaseConnection.Consultar(@"SELECT r.reserva_id, r.huesped_principal_id, c.nombre, r.fecha_entrada, r.fecha_salida, r.estado, r.grupo_id, r.cantidad_personas, r.fecha_reserva
                                                              FROM public.reserva r JOIN public.canal_reserva c ON c.canal_id = r.canal_id
                                                              WHERE (@id::int IS NULL OR r.reserva_id = @id) ORDER BY r.reserva_id",
                          l => new { Id = l.GetInt32(0), Principal = l.GetInt32(1), Canal = l.GetString(2), Llegada = l.GetDateTime(3), Salida = l.GetDateTime(4),
-                                    Estado = l.GetString(5), Grupo = l.IsDBNull(6) ? (int?)null : l.GetInt32(6), Personas = l.GetInt32(7) }, Clonar(filtro)))
+                                    Estado = l.GetString(5), Grupo = l.IsDBNull(6) ? (int?)null : l.GetInt32(6), Personas = l.GetInt32(7),
+                                    Creada = l.IsDBNull(8) ? (DateTime?)null : l.GetDateTime(8) }, Clonar(filtro)))
             {
                 var principal = SampleData.Huespedes.FirstOrDefault(h => h.Id == r.Principal);
                 SampleData.Reservas.Add(new ReservaModel
@@ -191,10 +193,16 @@ public static class CargadorBaseDatos
                     Id = r.Id, Huesped = principal?.Nombre ?? "", Habitacion = habitaciones.FirstOrDefault(x => x.ReservaId == r.Id)?.HabitacionId ?? 0,
                     Llegada = r.Llegada, Salida = r.Salida, Estado = Traducciones.EstadoReservaInterfaz(r.Estado), Canal = Traducciones.CanalInterfaz(r.Canal),
                     Paquete = paquetes.GetValueOrDefault(r.Id, "Sin paquete"), GrupoId = r.Grupo, PromocionId = promociones.TryGetValue(r.Id, out var promo) ? promo : null,
-                    Personas = r.Personas
+                    Personas = r.Personas, FechaCreacion = r.Creada
                 });
                 SampleData.ReservaHuespedes.Add(new ReservaHuespedModel(r.Id, r.Principal, true));
             }
+
+            foreach (var noche in DatabaseConnection.Consultar(@"SELECT rh.reserva_id, rh.habitacion_id, n.noche, n.precio FROM public.reserva_habitacion_noche n
+                                                               JOIN public.reserva_habitacion rh ON rh.reserva_habitacion_id = n.reserva_habitacion_id
+                                                               WHERE (@id::int IS NULL OR rh.reserva_id = @id) ORDER BY rh.reserva_id, n.noche",
+                         l => (Reserva: l.GetInt32(0), Habitacion: l.GetInt32(1), Noche: l.GetDateTime(2), Precio: l.GetDecimal(3)), Clonar(filtro)))
+                SampleData.Reservas.FirstOrDefault(x => x.Id == noche.Reserva)?.AlojamientoNochesAcordadas.Add(new PrecioAlojamientoAcordadoModel(noche.Habitacion, noche.Noche, noche.Precio));
 
             foreach (var rh in DatabaseConnection.Consultar("SELECT reserva_id, huesped_id FROM public.reserva_huesped WHERE (@id::int IS NULL OR reserva_id = @id)",
                          l => (Reserva: l.GetInt32(0), Huesped: l.GetInt32(1)), Clonar(filtro)))
@@ -232,6 +240,7 @@ public static class CargadorBaseDatos
     // Grupos, recursos adicionales, lista de espera, historial de consentimientos y notificaciones.
     private static void CargarComplementos()
     {
+        ComercialRepositorio.CargarCatalogo();
         SampleData.GruposReservas.AddRange(DatabaseConnection.Consultar(
             "SELECT grupo_id, nombre, COALESCE(fecha_creacion, LOCALTIMESTAMP) FROM public.grupo_reserva ORDER BY grupo_id",
             l => new GrupoReservaModel(l.GetInt32(0), l.GetString(1), l.GetDateTime(2))));
@@ -268,8 +277,8 @@ public static class CargadorBaseDatos
         var huespedesCambio = DatabaseConnection.Consultar("SELECT cambio_id, huesped_id FROM public.cambio_habitacion_huesped",
             l => (Cambio: l.GetInt32(0), Huesped: l.GetInt32(1))).ToLookup(x => x.Cambio, x => x.Huesped);
         SampleData.CambiosHabitacion.AddRange(DatabaseConnection.Consultar(
-            "SELECT cambio_id, reserva_id, COALESCE(estancia_id, 0), habitacion_origen_id, habitacion_destino_id, fecha, motivo FROM public.cambio_habitacion ORDER BY fecha, cambio_id",
-            l => new CambioHabitacionModel(l.GetInt32(0), l.GetInt32(1), l.GetInt32(2), l.GetInt32(3), l.GetInt32(4), huespedesCambio[l.GetInt32(0)].ToList(), l.GetDateTime(5), l.GetString(6), "")));
+            "SELECT cambio_id, reserva_id, COALESCE(estancia_id, 0), habitacion_origen_id, habitacion_destino_id, fecha, motivo, COALESCE(observaciones, '') FROM public.cambio_habitacion ORDER BY fecha, cambio_id",
+            l => new CambioHabitacionModel(l.GetInt32(0), l.GetInt32(1), l.GetInt32(2), l.GetInt32(3), l.GetInt32(4), huespedesCambio[l.GetInt32(0)].ToList(), l.GetDateTime(5), l.GetString(6), l.GetString(7))));
 
         // La base guarda una fila por cada cambio; el estado anterior es el de la fila previa del mismo huésped.
         var ultimo = new Dictionary<int, bool>();
@@ -386,11 +395,11 @@ public static class CargadorBaseDatos
     // Catálogo de servicios y las solicitudes de los huéspedes con su cita o traslado.
     private static void CargarServicios()
     {
-        foreach (var s in DatabaseConnection.Consultar(@"SELECT servicio_id, nombre, COALESCE(tipo, ''), precio, COALESCE(activo, true), servicio_padre_id, COALESCE(descripcion, ''), requiere_cita, duracion_minutos, reservable
+        foreach (var s in DatabaseConnection.Consultar(@"SELECT servicio_id, nombre, COALESCE(tipo, ''), precio, COALESCE(activo, true), servicio_padre_id, COALESCE(descripcion, ''), requiere_cita, duracion_minutos, reservable, COALESCE(requiere_traslado, false)
                                                         FROM public.servicio ORDER BY servicio_id",
                      l => new { Id = l.GetInt32(0), Nombre = l.GetString(1), Tipo = l.GetString(2), Precio = l.GetDecimal(3), Activo = l.GetBoolean(4),
                                 Padre = l.IsDBNull(5) ? (int?)null : l.GetInt32(5), Descripcion = l.GetString(6), Cita = l.GetBoolean(7),
-                                Duracion = l.IsDBNull(8) ? 60 : l.GetInt32(8), Reservable = l.GetBoolean(9) }))
+                                Duracion = l.IsDBNull(8) ? 60 : l.GetInt32(8), Reservable = l.GetBoolean(9), Traslado = l.GetBoolean(10) }))
         {
             // La base no guarda si un servicio es un traslado: se reconoce por su nombre.
             string texto = $"{s.Nombre} {s.Tipo}".ToLowerInvariant();
@@ -398,7 +407,7 @@ public static class CargadorBaseDatos
             {
                 Id = s.Id, Nombre = s.Nombre, Categoria = s.Tipo, Precio = s.Precio, RequiereCita = s.Cita, PadreId = s.Padre, Activo = s.Activo, Reservable = s.Reservable,
                 DuracionMinutos = s.Duracion, Descripcion = s.Descripcion,
-                RequiereTraslado = s.Padre is not null && (texto.Contains("traslado") || texto.Contains("taxi"))
+                RequiereTraslado = s.Traslado || (s.Padre is not null && (texto.Contains("traslado") || texto.Contains("taxi")))
             });
         }
 
@@ -487,33 +496,34 @@ public static class CargadorBaseDatos
         }
 
         foreach (var d in DatabaseConnection.Consultar(@"SELECT devolucion_id, pago_id, monto, COALESCE(motivo, ''), COALESCE(fecha, LOCALTIMESTAMP), COALESCE(estado, 'PENDIENTE'),
-                                                              COALESCE(usuario_solicitante_id, 0), usuario_autorizador_id, fecha_autorizacion, fecha_ejecucion FROM public.devolucion ORDER BY devolucion_id",
+                                                              COALESCE(usuario_solicitante_id, 0), usuario_autorizador_id, fecha_autorizacion, fecha_ejecucion, COALESCE(descripcion, '') FROM public.devolucion ORDER BY devolucion_id",
                      l => new { Id = l.GetInt32(0), Pago = l.GetInt32(1), Monto = l.GetDecimal(2), Motivo = l.GetString(3), Solicitada = l.GetDateTime(4), Estado = l.GetString(5),
                                 Solicita = l.GetInt32(6), Autoriza = l.IsDBNull(7) ? (int?)null : l.GetInt32(7), FechaAut = l.IsDBNull(8) ? (DateTime?)null : l.GetDateTime(8),
-                                Ejecutada = l.IsDBNull(9) ? (DateTime?)null : l.GetDateTime(9) }))
+                                Ejecutada = l.IsDBNull(9) ? (DateTime?)null : l.GetDateTime(9), Descripcion = l.GetString(10) }))
         {
             var movimiento = SampleData.MovimientosCaja.FirstOrDefault(x => x.Tipo == "Devolución" && x.CorreccionId == d.Id);
             SampleData.Devoluciones.Add(new DevolucionModel(d.Id, d.Pago, d.Monto, d.Motivo, Traducciones.EstadoCorreccionInterfaz(d.Estado))
             {
                 Solicitada = d.Solicitada, UsuarioSolicitaId = d.Solicita, UsuarioAutorizaId = d.Autoriza, FechaAutorizacion = d.FechaAut, Ejecutada = d.Ejecutada,
-                TurnoEjecucionId = movimiento?.TurnoId, MetodoEjecucion = movimiento?.Metodo ?? ""
+                TurnoEjecucionId = movimiento?.TurnoId, MetodoEjecucion = movimiento?.Metodo ?? "", Descripcion = d.Descripcion
             });
         }
 
         foreach (var a in DatabaseConnection.Consultar(@"SELECT anulacion_id, pago_id, COALESCE(motivo, ''), COALESCE(fecha, LOCALTIMESTAMP), estado, COALESCE(usuario_solicitante_id, 0),
-                                                              usuario_autorizador_id, fecha_autorizacion, fecha_ejecucion FROM public.anulacion ORDER BY anulacion_id",
+                                                              usuario_autorizador_id, fecha_autorizacion, fecha_ejecucion, COALESCE(descripcion, '') FROM public.anulacion ORDER BY anulacion_id",
                      l => new { Id = l.GetInt32(0), Pago = l.GetInt32(1), Motivo = l.GetString(2), Solicitada = l.GetDateTime(3), Estado = l.GetString(4), Solicita = l.GetInt32(5),
                                 Autoriza = l.IsDBNull(6) ? (int?)null : l.GetInt32(6), FechaAut = l.IsDBNull(7) ? (DateTime?)null : l.GetDateTime(7),
-                                Ejecutada = l.IsDBNull(8) ? (DateTime?)null : l.GetDateTime(8) }))
+                                Ejecutada = l.IsDBNull(8) ? (DateTime?)null : l.GetDateTime(8), Descripcion = l.GetString(9) }))
         {
             var movimiento = SampleData.MovimientosCaja.FirstOrDefault(x => x.Tipo == "Anulación" && x.CorreccionId == a.Id);
             SampleData.Anulaciones.Add(new AnulacionModel(a.Id, a.Pago, a.Motivo, Traducciones.EstadoCorreccionInterfaz(a.Estado))
-            { Solicitada = a.Solicitada, UsuarioSolicitaId = a.Solicita, UsuarioAutorizaId = a.Autoriza, FechaAutorizacion = a.FechaAut, Ejecutada = a.Ejecutada, TurnoEjecucionId = movimiento?.TurnoId });
+            { Solicitada = a.Solicitada, UsuarioSolicitaId = a.Solicita, UsuarioAutorizaId = a.Autoriza, FechaAutorizacion = a.FechaAut, Ejecutada = a.Ejecutada, TurnoEjecucionId = movimiento?.TurnoId, Descripcion = a.Descripcion });
         }
 
         // Los cierres guardan lo esperado y lo contado; los cobros y devoluciones en efectivo se vuelven a sumar de los movimientos del turno.
-        foreach (var c in DatabaseConnection.Consultar("SELECT cierre_id, turno_id, monto_esperado, monto_real, diferencia, COALESCE(fecha, LOCALTIMESTAMP), COALESCE(observaciones, '') FROM public.cierre_caja ORDER BY cierre_id",
-                     l => new { Id = l.GetInt32(0), Turno = l.GetInt32(1), Esperado = l.GetDecimal(2), Real = l.GetDecimal(3), Diferencia = l.GetDecimal(4), Fecha = l.GetDateTime(5), Observaciones = l.GetString(6) }))
+        foreach (var c in DatabaseConnection.Consultar("SELECT cierre_id, turno_id, monto_esperado, monto_real, diferencia, COALESCE(fecha, LOCALTIMESTAMP), COALESCE(observaciones, ''), usuario_revisor_id, fecha_revision FROM public.cierre_caja ORDER BY cierre_id",
+                     l => new { Id = l.GetInt32(0), Turno = l.GetInt32(1), Esperado = l.GetDecimal(2), Real = l.GetDecimal(3), Diferencia = l.GetDecimal(4), Fecha = l.GetDateTime(5), Observaciones = l.GetString(6),
+                                Revisor = l.IsDBNull(7) ? (int?)null : l.GetInt32(7), Revisado = l.IsDBNull(8) ? (DateTime?)null : l.GetDateTime(8) }))
         {
             var turno = SampleData.TurnosCaja.FirstOrDefault(t => t.Id == c.Turno);
             if (turno is null) continue;
@@ -521,7 +531,7 @@ public static class CargadorBaseDatos
             bool EsEfectivo(string metodo) => SampleData.MetodosPago.FirstOrDefault(x => x.Nombre == metodo)?.EsEfectivo ?? false;
             SampleData.CierresCaja.Add(new CierreCajaModel(c.Id, c.Fecha, c.Esperado, c.Real, c.Diferencia, c.Observaciones)
             {
-                TurnoCajaId = c.Turno, UsuarioId = turno.UsuarioId, Apertura = turno.Apertura, AperturaMonto = turno.MontoInicial,
+                TurnoCajaId = c.Turno, UsuarioId = turno.UsuarioId, Apertura = turno.Apertura, AperturaMonto = turno.MontoInicial, UsuarioRevisorId = c.Revisor, FechaRevision = c.Revisado,
                 EfectivoCobros = movimientos.Where(x => x.Tipo == "Cobro" && EsEfectivo(x.Metodo)).Sum(x => x.Monto),
                 EfectivoDevoluciones = movimientos.Where(x => x.Tipo == "Devolución" && EsEfectivo(x.Metodo)).Sum(x => x.Monto),
                 NoEfectivo = movimientos.Where(x => x.Tipo == "Cobro" && !EsEfectivo(x.Metodo)).Sum(x => x.Monto)

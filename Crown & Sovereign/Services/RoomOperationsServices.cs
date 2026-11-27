@@ -182,6 +182,7 @@ public sealed partial class EstanciaService
         if (guestIds.Count == 0) guestIds = SampleData.Huespedes.Where(item => item.Habitacion == source.Id).Select(item => item.Id).ToList();
         if (guestIds.Count == 0) throw new InvalidOperationException("No se identificaron huéspedes asignados a la habitación actual.");
         if (destination.Capacidad < guestIds.Count) throw new InvalidOperationException("La capacidad de la habitación destino no es suficiente para los huéspedes afectados.");
+        if (destination.Id == habitacionOrigenId) throw new InvalidOperationException("La habitación destino debe ser distinta a la actual.");
         var destinationState = new HabitacionService().ObtenerEstadoOperativo(destination.Id);
         if (destinationState.Ocupada || destinationState.Bloqueada || destinationState.EstadoLimpieza != "Limpia" || destinationState.RequiereRevisionOperativa)
             throw new InvalidOperationException("La habitación destino debe estar desocupada, limpia, operativa y sin revisión pendiente.");
@@ -191,7 +192,7 @@ public sealed partial class EstanciaService
         var newAssignmentId = Persistencia.SiguienteId("reserva_habitacion", "reserva_habitacion_id",
             () => SampleData.ReservaHabitaciones.Where(item => item != sourceAssignment).Select(item => item.ReservaHabitacionId).DefaultIfEmpty(0).Max() + 1);
         int changeId;
-        try { changeId = EstanciaRepositorio.RegistrarCambioHabitacion(reservaId, source.Id, destination.Id, sourceAssignment.ReservaHabitacionId, newAssignmentId, guestIds, motivo); }
+        try { changeId = EstanciaRepositorio.RegistrarCambioHabitacion(reservaId, source.Id, destination.Id, sourceAssignment.ReservaHabitacionId, newAssignmentId, guestIds, motivo, observaciones); }
         catch (Exception ex) { throw new InvalidOperationException("No se pudo registrar el cambio de habitación en la base de datos. " + ex.Message, ex); }
         SampleData.ReservaHabitaciones.Remove(sourceAssignment);
         SampleData.ReservaHabitaciones.Add(new(newAssignmentId, reservaId, destination.Id));

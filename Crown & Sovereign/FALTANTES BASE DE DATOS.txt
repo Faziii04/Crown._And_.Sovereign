@@ -1,0 +1,38 @@
+FALTANTES EN LA BASE DE DATOS (rol Recepcionista)
+=================================================
+
+Lo que sigue sin existir en la base después de adaptar el sistema a las
+tablas y columnas nuevas.
+
+COLUMNAS QUE FALTAN
+-------------------
+- solicitud de devolución y de anulación: descripcion (text).
+  Hoy se pierde la descripción escrita por el recepcionista.
+- notificacion_recepcion: no hay forma de marcar "leída" por usuario con
+  los datos actuales. Hoy la marca de leída no se guarda.
+- tarea_limpieza o solicitud de limpieza: quién la pidió.
+- traslado: contacto ya existe como columna, pero la pantalla no pide ese dato.
+- cambio_habitacion: observaciones (text). Hoy solo se guarda el motivo.
+- paquete: columna activo (boolean). Hoy todos los paquetes guardados se
+  cargan como activos y no se puede desactivar uno de forma permanente.
+- paquete_servicio / reserva_paquete_servicio: columna compartido (boolean).
+- promocion: tipo de descuento. La tabla solo guarda un porcentaje; la regla
+  "noches gratis" de la interfaz no se puede guardar.
+- tarifa: vigencia (fecha_inicio y fecha_fin). La tarifa base no tiene fechas.
+- servicio: marca de traslado. Hoy se deduce por el nombre.
+- consumo: origen del consumo; hoy se lee la columna tipo.
+
+DATOS DE CONFIGURACIÓN VACÍOS
+-----------------------------
+- impuesto: 0 filas. Las facturas salen con 0 % hasta que se cargue el
+  porcentaje (el sistema anterior usaba 13 %).
+- temporada, convenio, promocion, paquete: 0 filas. Sin ellos solo se cobra
+  la tarifa base de la habitación.
+
+NOTAS TÉCNICAS
+--------------
+- Los ids de lista_espera_contacto, auditoria_accion, cambio_habitacion y
+  factura_linea son de tipo "GENERATED ALWAYS": el sistema no envía el id y
+  lo toma de la base.
+- auditoria_accion exige entidad y usuario_id: las acciones hechas por
+  usuarios que no existen en la tabla usuario no se auditan en la base.

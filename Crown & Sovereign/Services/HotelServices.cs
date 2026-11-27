@@ -249,7 +249,7 @@ public sealed class ReservaService
         if (!NavigationService.Puede("Reservas")) throw new UnauthorizedAccessException("Tu rol no puede crear reservas.");
         if (borrador.ReservaConfirmadaId is int createdId)
             return SampleData.Reservas.FirstOrDefault(item => item.Id == createdId) ?? throw new InvalidOperationException("El borrador ya fue confirmado, pero no se encontró la reserva asociada.");
-        HabitacionDisponibilidadService.ValidarFechas(borrador.Llegada, borrador.Salida);
+        HabitacionDisponibilidadService.ValidarFechasReserva(borrador.Llegada, borrador.Salida);
         var guestIds = new[] { borrador.HuespedPrincipalId }.Where(id => id.HasValue).Select(id => id!.Value).Concat(borrador.HuespedesAcompanantes).Distinct().ToList();
         if (borrador.HuespedPrincipalId is not int principalId || !SampleData.Huespedes.Any(item => item.Id == principalId)) throw new InvalidOperationException("Selecciona un huésped principal antes de confirmar.");
         if (borrador.Personas < 1 || borrador.HabitacionesRequeridas < 1) throw new InvalidOperationException("Revisa la cantidad de huéspedes y habitaciones.");
@@ -314,7 +314,7 @@ public sealed class ReservaService
     {
         if (!NavigationService.Puede("Reservas")) throw new UnauthorizedAccessException("Tu rol no puede editar reservas.");
         if (reserva.Estado is "En estancia" or "Finalizada" or "Cancelada") throw new InvalidOperationException("Esta reserva ya no admite edición de alojamiento.");
-        HabitacionDisponibilidadService.ValidarFechas(borrador.Llegada, borrador.Salida);
+        HabitacionDisponibilidadService.ValidarFechasReserva(borrador.Llegada, borrador.Salida);
         var criteria = Criterios(borrador);
         new HabitacionDisponibilidadService().ValidarSeleccion(criteria, borrador.HabitacionesSeleccionadas, reserva.Id);
         var principal = SampleData.Huespedes.FirstOrDefault(item => item.Id == borrador.HuespedPrincipalId) ?? throw new InvalidOperationException("Selecciona un huésped principal.");
@@ -537,6 +537,7 @@ public sealed partial class HuespedService
     private static void ValidarDatos(string nombre,string documento,string correo,string telefono)
     {
         if(nombre.Trim().Length>200||documento.Trim().Length>50||correo.Trim().Length>150)throw new InvalidOperationException("El nombre, el documento o el correo son demasiado largos.");
+        if(!System.Text.RegularExpressions.Regex.IsMatch(nombre.Trim(),@"^[\p{L}][\p{L}\s.'\-]*$"))throw new InvalidOperationException("El nombre solo puede tener letras, espacios, puntos, guiones y apóstrofes.");
         if(!string.IsNullOrWhiteSpace(correo)&&!System.Text.RegularExpressions.Regex.IsMatch(correo.Trim(),@"^[^@\s]+@[^@\s]+\.[^@\s]+$"))throw new InvalidOperationException("El correo no tiene un formato válido.");
         if(!string.IsNullOrWhiteSpace(telefono)&&!System.Text.RegularExpressions.Regex.IsMatch(telefono.Trim(),@"^\+?[\d\s\-()]{6,30}$"))throw new InvalidOperationException("El teléfono no tiene un formato válido.");
     }
@@ -892,6 +893,7 @@ public sealed class LimpiezaService
     {
         if(!NavigationService.Puede("Habitaciones"))throw new UnauthorizedAccessException("Tu rol no puede solicitar limpieza desde Habitaciones.");
         var room=SampleData.Habitaciones.FirstOrDefault(item=>item.Id==habitacion)??throw new InvalidOperationException("No se encontró la habitación.");
+        if(string.IsNullOrWhiteSpace(motivo))throw new InvalidOperationException("Indica el motivo de la limpieza.");
         if(TareaActiva(habitacion) is { } active)throw new InvalidOperationException($"Ya existe la tarea #{active.Id} · {active.Estado}. Consulta su progreso en Limpieza.");
         var task=new TareaModel{Id=Persistencia.SiguienteId("tarea_limpieza","tarea_id",()=>SampleData.Tareas.Count==0?1:SampleData.Tareas.Max(item=>item.Id)+1),Habitacion=room.Id,Piso=room.Piso,Tipo=motivo,Estado="Pendiente",Empleado="",Prioridad=prioridad,Hora=DateTime.Now,MotivoSolicitud=motivo,Observaciones=observaciones.Trim(),SolicitadoPor=SesionActual.Usuario?.Nombre??"Recepción"};
         var markDirty=!(room.Estado=="Ocupada"&&room.Limpieza=="Limpia"&&motivo is "Limpieza adicional" or "Limpieza solicitada por huésped");
@@ -1143,7 +1145,7 @@ public sealed partial class EstanciaService
         if (charges.Count > 0) new FolioService().RegistrarCargosPorEstancia(charges, stay.Id);
         SampleData.Estancias[stayIndex] = stay with { CheckOut = quote.NewDeparture };
         reservation.Salida = quote.NewDeparture;
-        SampleData.Auditoria.Insert(0, new(DateTime.Now, SesionActual.Usuario?.Usuario ?? "demo", "Extensión de estancia", $"Estancia #{stay.Id}", $"Salida {quote.CurrentDeparture:dd/MM/yyyy} → {quote.NewDeparture:dd/MM/yyyy} · Bs {quote.Total:N2}"));
+        AuditoriaRepositorio.Registrar(new(DateTime.Now, SesionActual.Usuario?.Usuario ?? "demo", "Extensión de estancia", $"Estancia #{stay.Id}", $"Salida {quote.CurrentDeparture:dd/MM/yyyy} → {quote.NewDeparture:dd/MM/yyyy} · Bs {quote.Total:N2}"));
         return quote;
     }
 
@@ -1262,7 +1264,7 @@ public sealed class LlaveService
         var key=SampleData.Llaves[index];
         if(key.Estado!="Activa")throw new InvalidOperationException("Solo se puede registrar la devolución de una llave activa.");
         SampleData.Llaves[index]=key with{Estado="Devuelta"};
-        SampleData.Auditoria.Insert(0,new(DateTime.Now,SesionActual.Usuario?.Usuario??"demo","Devolución de llave",$"Estancia #{key.EstanciaId}",key.Codigo));
+        AuditoriaRepositorio.Registrar(new(DateTime.Now,SesionActual.Usuario?.Usuario??"demo","Devolución de llave",$"Estancia #{key.EstanciaId}",key.Codigo));
     }
     public void Revocar(int keyId)
     {

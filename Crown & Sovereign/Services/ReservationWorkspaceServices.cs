@@ -26,7 +26,7 @@ public sealed class HabitacionDisponibilidadService
 
     public IReadOnlyList<HabitacionDisponibleModel> BuscarHabitaciones(ReservationSearchCriteria criteria, string? tipo = null, int? excluirReservaId = null)
     {
-        ValidarFechas(criteria.Llegada, criteria.Salida);
+        ValidarFechasReserva(criteria.Llegada, criteria.Salida);
         if (criteria.Personas < 1 || criteria.Habitaciones < 1) throw new InvalidOperationException("Personas y habitaciones deben ser cantidades positivas.");
         return SampleData.Habitaciones
             .Where(room => string.IsNullOrWhiteSpace(tipo) || tipo == "Todos los tipos" || room.Tipo.Equals(tipo, StringComparison.OrdinalIgnoreCase))
@@ -83,6 +83,15 @@ public sealed class HabitacionDisponibilidadService
     public static void ValidarFechas(DateTime llegada, DateTime salida)
     {
         if (salida.Date <= llegada.Date) throw new InvalidOperationException("La salida debe ser posterior a la llegada.");
+    }
+
+    /// <summary>Para reservas nuevas o editadas: además del orden de las fechas, no se acepta el pasado ni plazos fuera de lo razonable.</summary>
+    public static void ValidarFechasReserva(DateTime llegada, DateTime salida)
+    {
+        ValidarFechas(llegada, salida);
+        if (llegada.Date < DateTime.Today) throw new InvalidOperationException("No se puede reservar en fechas pasadas: la llegada debe ser hoy o una fecha futura.");
+        if (llegada.Date > DateTime.Today.AddYears(2)) throw new InvalidOperationException("La llegada no puede ser a más de 2 años desde hoy.");
+        if ((salida.Date - llegada.Date).Days > 60) throw new InvalidOperationException("Una reserva no puede superar las 60 noches.");
     }
 
     private static bool TieneComodidades(HabitacionModel room, IReadOnlyCollection<string> required)
@@ -212,7 +221,7 @@ public sealed class RecursoAdicionalService
         var allocation = new ReservaRecursoModel(stay.ReservaId, recursoId, totalQuantity, agreedPrice, agreedMode, "PENDIENTE", combinedNotes, cargoId);
         if (existing is null) SampleData.ReservaRecursos.Add(allocation);
         else SampleData.ReservaRecursos[SampleData.ReservaRecursos.FindIndex(item => item.ReservaId == stay.ReservaId && item.RecursoId == recursoId)] = allocation;
-        SampleData.Auditoria.Insert(0, new(DateTime.Now, SesionActual.Usuario?.Usuario ?? "demo", "Solicitud de recurso", $"Estancia #{stay.Id}", $"{resource.Nombre} · +{cantidadAdicional} · total {totalQuantity}"));
+        AuditoriaRepositorio.Registrar(new(DateTime.Now, SesionActual.Usuario?.Usuario ?? "demo", "Solicitud de recurso", $"Estancia #{stay.Id}", $"{resource.Nombre} · +{cantidadAdicional} · total {totalQuantity}"));
         return allocation;
     }
 
@@ -370,7 +379,8 @@ public sealed class ListaEsperaService
             .Select(item =>
             {
                 var criteria = new ReservationSearchCriteria { Llegada = item.Llegada, Salida = item.Salida, Personas = item.Personas, Habitaciones = item.Habitaciones, TipoHabitacion = item.TipoHabitacion };
-                var rooms = _availability.BuscarHabitaciones(criteria, item.TipoHabitacion);
+                // Una espera que ya empezó no puede cubrirse con habitaciones.
+                IReadOnlyList<HabitacionDisponibleModel> rooms = item.Llegada.Date < DateTime.Today ? Array.Empty<HabitacionDisponibleModel>() : _availability.BuscarHabitaciones(criteria, item.TipoHabitacion);
                 var guest = item.HuespedId is int guestId ? SampleData.Huespedes.FirstOrDefault(person => person.Id == guestId) : SampleData.Huespedes.FirstOrDefault(person => person.Nombre == item.Huesped);
                 return new CoincidenciaEsperaModel(item, guest?.Nombre ?? item.Huesped, guest?.Telefono ?? "Sin teléfono", guest?.Email ?? "Sin correo", rooms.Count, rooms);
             }).Where(item => string.IsNullOrWhiteSpace(busqueda) || $"{item.Huesped} {item.Solicitud.TipoHabitacion}".Contains(busqueda, StringComparison.OrdinalIgnoreCase))
@@ -378,7 +388,7 @@ public sealed class ListaEsperaService
     }
     public ListaEsperaModel Registrar(string huesped, int? guestId, DateTime llegada, DateTime salida, string tipo, int personas, int habitaciones, string observaciones)
     {
-        HabitacionDisponibilidadService.ValidarFechas(llegada, salida);
+        HabitacionDisponibilidadService.ValidarFechasReserva(llegada, salida);
         if (string.IsNullOrWhiteSpace(huesped) || personas < 1 || habitaciones < 1) throw new InvalidOperationException("Completa el huésped y las cantidades solicitadas.");
         var person = guestId is int id ? SampleData.Huespedes.FirstOrDefault(item => item.Id == id) : SampleData.Huespedes.FirstOrDefault(item => item.Nombre == huesped.Trim());
         if (Persistencia.Activa && person is null) throw new InvalidOperationException("Selecciona un huésped registrado para la lista de espera.");

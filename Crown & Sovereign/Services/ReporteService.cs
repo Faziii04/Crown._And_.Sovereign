@@ -31,7 +31,27 @@ public sealed class ReporteService
         new("olvidados", "Objetos olvidados", "Operaciones", "Objetos registrados y estado actual.", "La custodia histórica completa no está disponible.")
     ];
 
-    public static IReadOnlyList<ResultadoReporte> Recientes => _recientes.ToList();
+    private static bool _guardadosCargados;
+    public static IReadOnlyList<ResultadoReporte> Recientes { get { CargarGuardados(); return _recientes.ToList(); } }
+
+    // Los reportes de sesiones anteriores se vuelven a calcular con sus fechas; el que ya no se pueda armar se omite.
+    private static void CargarGuardados()
+    {
+        if (_guardadosCargados || !Persistencia.Activa) return;
+        _guardadosCargados = true;
+        try
+        {
+            var servicio = new ReporteService();
+            foreach (var guardado in ReporteRepositorio.Recientes(20))
+            {
+                var definicion = Catalogo.FirstOrDefault(item => item.Id == guardado.Codigo);
+                if (definicion is null) continue;
+                try { _recientes.Add(servicio.Construir(definicion, new ParametrosReporte(guardado.Codigo, "Personalizado", guardado.Desde, guardado.Hasta)) with { Generado = guardado.Generado, Usuario = guardado.Usuario }); }
+                catch { }
+            }
+        }
+        catch { }
+    }
     public static IReadOnlyList<string> Periodos { get; } = ["Hoy", "Ayer", "Últimos 7 días", "Últimos 30 días", "Últimos 90 días", "Este mes", "Mes anterior", "Este trimestre", "Este año", "Próximos 7 días", "Próximos 30 días", "Periodo personalizado"];
 
     public IReadOnlyList<ResultadoReporte> Generar(ParametrosReporte parametros)
@@ -63,7 +83,9 @@ public sealed class ReporteService
             }).ToList();
             result = result with { PeriodoComparacion = $"{previousStart:dd/MM/yyyy} – {previousEnd:dd/MM/yyyy}", Comparacion = comparison };
         }
+        CargarGuardados();
         _recientes.Insert(0, result);
+        ReporteRepositorio.Guardar(result);
         if (_recientes.Count > 20) _recientes.RemoveAt(_recientes.Count - 1);
         return _recientes.ToList();
     }

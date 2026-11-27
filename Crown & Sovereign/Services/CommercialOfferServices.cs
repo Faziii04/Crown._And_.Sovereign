@@ -26,7 +26,7 @@ public sealed class PaqueteService
         var item = id is int packageId
             ? SampleData.Paquetes.FirstOrDefault(existing => existing.Id == packageId) ?? throw new InvalidOperationException("No se encontró el paquete.")
             : null;
-        var saved = new PaqueteModel(id ?? (SampleData.Paquetes.Count == 0 ? 1 : SampleData.Paquetes.Max(existing => existing.Id) + 1), nombre.Trim(), descripcion.Trim(), precio, activo);
+        var saved = new PaqueteModel(id ?? Persistencia.SiguienteId("paquete", "paquete_id", () => SampleData.Paquetes.Count == 0 ? 1 : SampleData.Paquetes.Max(existing => existing.Id) + 1), nombre.Trim(), descripcion.Trim(), precio, activo);
 
         // Validate everything before changing the shared catalog.
         if (item is not null)
@@ -38,8 +38,9 @@ public sealed class PaqueteService
         SampleData.PaquetesServicios.AddRange(beneficios.Select(benefit => benefit with { PaqueteId = saved.Id }));
         SampleData.PaquetesImagenes.RemoveAll(image => image.PaqueteId == saved.Id);
         SampleData.PaquetesImagenes.AddRange(images.Select((image, index) => new PaqueteImagenModel(
-            SampleData.PaquetesImagenes.Count == 0 ? 1 : SampleData.PaquetesImagenes.Max(existing => existing.Id) + 1,
+            Persistencia.SiguienteId("paquete_imagen", "imagen_id", () => SampleData.PaquetesImagenes.Count == 0 ? 1 : SampleData.PaquetesImagenes.Max(existing => existing.Id) + 1),
             saved.Id, image.Url, "Imagen del paquete", index == 0, index + 1)));
+        ComercialRepositorio.GuardarPaquete(saved.Id);
         Registrar(id is null ? "Creación de paquete" : "Actualización de paquete", $"{saved.Nombre} · Bs {saved.Precio:N2}");
         return saved;
     }
@@ -51,6 +52,7 @@ public sealed class PaqueteService
         if (SampleData.ReservaPaquetes.Any(item => item.PaqueteId == id) || SampleData.ReservaPaqueteServicios.Any(item => item.PaqueteId == id))
             throw new InvalidOperationException("No se puede eliminar: hay huéspedes con este paquete o beneficios adquiridos. Puedes desactivarlo para nuevas reservas.");
         SampleData.Paquetes.Remove(package); SampleData.PaquetesServicios.RemoveAll(item => item.PaqueteId == id); SampleData.PaquetesImagenes.RemoveAll(item => item.PaqueteId == id);
+        ComercialRepositorio.EliminarPaquete(id);
     }
 
     private static void Validar(string nombre, string descripcion, decimal precio, IReadOnlyCollection<PaqueteServicioModel> benefits)
@@ -69,7 +71,7 @@ public sealed class PaqueteService
     }
 
     private static void Autorizar() { if (!NavigationService.Puede("Paquetes y promociones")) throw new UnauthorizedAccessException("Solo Gerencia puede modificar paquetes comerciales."); }
-    private static void Registrar(string accion, string detalle) => SampleData.Auditoria.Insert(0, new(DateTime.Now, SesionActual.Usuario?.Usuario ?? "demo", accion, "—", detalle));
+    private static void Registrar(string accion, string detalle) => AuditoriaRepositorio.Registrar(new(DateTime.Now, SesionActual.Usuario?.Usuario ?? "demo", accion, "—", detalle));
 }
 
 /// <summary>Only percentage discounts are persistable with the supplied promotion structure.</summary>
@@ -83,13 +85,15 @@ public sealed class PromocionService
         if (string.IsNullOrWhiteSpace(nombre)) throw new InvalidOperationException("Escribe el nombre de la promoción.");
         if (porcentaje is <= 0 or > 100) throw new InvalidOperationException("El porcentaje debe estar entre 0,01 % y 100 %.");
         if (hasta.Date < desde.Date) throw new InvalidOperationException("La fecha final no puede ser anterior a la fecha inicial.");
+        if (id is null && hasta.Date < DateTime.Today) throw new InvalidOperationException("No se puede crear una promoción en fechas pasadas: debe terminar hoy o más adelante.");
         var current = id is int existing ? SampleData.Promociones.FirstOrDefault(item => item.Id == existing) ?? throw new InvalidOperationException("No se encontró la promoción.") : null;
         if (current?.TipoDescuento.Equals("Porcentaje", StringComparison.OrdinalIgnoreCase) != true && current is not null)
             throw new InvalidOperationException("Esta promoción usa una regla de noches del prototipo y no puede convertirse en una regla persistente sin una ampliación del esquema.");
         if (current is not null && TieneReservas(id!.Value)) throw new InvalidOperationException("La promoción ya se aplicó a reservas. Sus reglas comerciales no se pueden reconstruir históricamente; conserva sus condiciones y crea otra campaña.");
-        var saved = new PromocionModel(id ?? (SampleData.Promociones.Count == 0 ? 1 : SampleData.Promociones.Max(item => item.Id) + 1), nombre.Trim(), "Porcentaje", porcentaje, desde.Date, hasta.Date) { Activa = activa };
+        var saved = new PromocionModel(id ?? Persistencia.SiguienteId("promocion", "promocion_id", () => SampleData.Promociones.Count == 0 ? 1 : SampleData.Promociones.Max(item => item.Id) + 1), nombre.Trim(), "Porcentaje", porcentaje, desde.Date, hasta.Date) { Activa = activa };
         if (current is null) SampleData.Promociones.Add(saved); else SampleData.Promociones[SampleData.Promociones.IndexOf(current)] = saved;
-        SampleData.Auditoria.Insert(0, new(DateTime.Now, SesionActual.Usuario?.Usuario ?? "demo", id is null ? "Creación de promoción" : "Actualización de promoción", "—", $"{saved.Nombre} · {saved.Valor:N2}%"));
+        ComercialRepositorio.GuardarPromocion(saved.Id);
+        AuditoriaRepositorio.Registrar(new(DateTime.Now, SesionActual.Usuario?.Usuario ?? "demo", id is null ? "Creación de promoción" : "Actualización de promoción", "—", $"{saved.Nombre} · {saved.Valor:N2}%"));
         return saved;
     }
 
@@ -98,6 +102,7 @@ public sealed class PromocionService
         Autorizar(); var current = SampleData.Promociones.FirstOrDefault(item => item.Id == id) ?? throw new InvalidOperationException("No se encontró la promoción.");
         if (TieneReservas(id)) throw new InvalidOperationException("La promoción ya se aplicó a reservas. No se puede cambiar su estado porque el esquema no conserva las reglas históricas.");
         SampleData.Promociones[SampleData.Promociones.IndexOf(current)] = current with { Activa = activa };
+        ComercialRepositorio.GuardarPromocion(id);
     }
 
     public void Eliminar(int id)
@@ -105,6 +110,7 @@ public sealed class PromocionService
         Autorizar(); var current = SampleData.Promociones.FirstOrDefault(item => item.Id == id) ?? throw new InvalidOperationException("No se encontró la promoción.");
         if (TieneReservas(id)) throw new InvalidOperationException("No se puede eliminar: la promoción está asociada a reservas. El esquema no conserva una copia de su descuento original.");
         SampleData.Promociones.Remove(current);
+        ComercialRepositorio.EliminarPromocion(id);
     }
 
     private static bool TieneReservas(int id) => SampleData.Reservas.Any(item => item.PromocionId == id);

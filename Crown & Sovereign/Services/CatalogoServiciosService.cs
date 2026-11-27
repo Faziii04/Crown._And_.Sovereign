@@ -55,6 +55,7 @@ public sealed class CatalogoServiciosService
         service.Nombre = nombre.Trim(); service.Categoria = categoria.Trim(); service.Descripcion = descripcion.Trim(); service.PadreId = padreId;
         if (gerente) { service.Activo = activo; service.Reservable = reservable; service.Precio = precio; }
         service.RequiereCita = requiereCita; service.DuracionMinutos = duracion;
+        ComercialRepositorio.GuardarServicio(service);
     }
 
     public ServicioModel Crear(string nombre, string categoria, string descripcion, int? padreId, bool activo, bool reservable,
@@ -64,10 +65,12 @@ public sealed class CatalogoServiciosService
         if (string.IsNullOrWhiteSpace(nombre) || string.IsNullOrWhiteSpace(categoria)) throw new InvalidOperationException("Completa el nombre y la categoría.");
         if (precio < 0 || duracion < 0 || (requiereCita && duracion < 15)) throw new InvalidOperationException("Revisa el precio y la duración.");
         var manager = SesionActual.Usuario?.Rol == "Gerente";
-        var service = new ServicioModel { Id = SampleData.Servicios.Count == 0 ? 1 : SampleData.Servicios.Max(item => item.Id) + 1,
+        var service = new ServicioModel { Id = Persistencia.SiguienteId("servicio", "servicio_id", () => SampleData.Servicios.Count == 0 ? 1 : SampleData.Servicios.Max(item => item.Id) + 1),
             Nombre = nombre.Trim(), Categoria = categoria.Trim(), Descripcion = descripcion.Trim(), PadreId = padreId, Activo = manager ? activo : true,
             Reservable = manager ? reservable : true, RequiereCita = requiereCita, DuracionMinutos = duracion, Precio = manager ? precio : 0m };
-        SampleData.Servicios.Add(service); return service;
+        SampleData.Servicios.Add(service);
+        ComercialRepositorio.GuardarServicio(service);
+        return service;
     }
 
     public void ValidarPadre(int? servicioId, int? nuevoPadreId)
@@ -93,6 +96,7 @@ public sealed class CatalogoServiciosService
     {
         if (SesionActual.Usuario?.Rol != "Gerente") throw new UnauthorizedAccessException("Solo el Gerente puede cambiar el estado administrativo del catálogo.");
         service.Activo = activo; // Parent state never cascades; historical and purchased rows remain intact.
+        ComercialRepositorio.GuardarServicio(service);
     }
 
     public void AsociarEmpleado(int servicioId, int empleadoId, bool activo = true)
@@ -102,6 +106,7 @@ public sealed class CatalogoServiciosService
         var index = SampleData.EmpleadosServicios.FindIndex(item => item.ServicioId == servicioId && item.EmpleadoId == empleadoId);
         if (index >= 0) SampleData.EmpleadosServicios[index] = SampleData.EmpleadosServicios[index] with { Activo = activo };
         else SampleData.EmpleadosServicios.Add(new(empleadoId, servicioId, activo));
+        ComercialRepositorio.GuardarEmpleadoServicio(servicioId, empleadoId);
     }
 
     public void AsociarProducto(int servicioId, int productoId, int cantidad)
@@ -112,19 +117,27 @@ public sealed class CatalogoServiciosService
         var index = SampleData.ServiciosProductos.FindIndex(item => item.ServicioId == servicioId && item.ProductoId == productoId);
         if (index >= 0) SampleData.ServiciosProductos[index] = SampleData.ServiciosProductos[index] with { CantidadIncluida = cantidad };
         else SampleData.ServiciosProductos.Add(new(servicioId, productoId, cantidad));
+        ComercialRepositorio.GuardarServicioProducto(servicioId, productoId);
         // Configuration only: product stock is never consumed here.
     }
 
-    public void QuitarProducto(int servicioId, int productoId) { AutorizarOperativo(); SampleData.ServiciosProductos.RemoveAll(item => item.ServicioId == servicioId && item.ProductoId == productoId); }
+    public void QuitarProducto(int servicioId, int productoId) { AutorizarOperativo(); SampleData.ServiciosProductos.RemoveAll(item => item.ServicioId == servicioId && item.ProductoId == productoId); ComercialRepositorio.QuitarServicioProducto(servicioId, productoId); }
     public void GuardarImagen(int servicioId, string url, string descripcion, bool principal)
     {
         AutorizarImagenes();
         if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https")) throw new InvalidOperationException("Indica una URL http(s) válida.");
         if (principal) for (var i = 0; i < SampleData.ServiciosImagenes.Count; i++) if (SampleData.ServiciosImagenes[i].ServicioId == servicioId && SampleData.ServiciosImagenes[i].EsPrincipal) SampleData.ServiciosImagenes[i] = SampleData.ServiciosImagenes[i] with { EsPrincipal = false };
-        var id = SampleData.ServiciosImagenes.Count == 0 ? 1 : SampleData.ServiciosImagenes.Max(item => item.Id) + 1;
+        var id = Persistencia.SiguienteId("servicio_imagen", "imagen_id", () => SampleData.ServiciosImagenes.Count == 0 ? 1 : SampleData.ServiciosImagenes.Max(item => item.Id) + 1);
         SampleData.ServiciosImagenes.Add(new(id, servicioId, uri.ToString(), descripcion.Trim(), principal, SampleData.ServiciosImagenes.Count(item => item.ServicioId == servicioId)));
+        ComercialRepositorio.SincronizarImagenesServicio(servicioId);
     }
-    public void QuitarImagen(int id) { AutorizarImagenes(); SampleData.ServiciosImagenes.RemoveAll(item => item.Id == id); }
+    public void QuitarImagen(int id)
+    {
+        AutorizarImagenes();
+        var servicioId = SampleData.ServiciosImagenes.FirstOrDefault(item => item.Id == id)?.ServicioId;
+        SampleData.ServiciosImagenes.RemoveAll(item => item.Id == id);
+        if (servicioId is int servicio) ComercialRepositorio.SincronizarImagenesServicio(servicio);
+    }
 
     private ServicioRevisionModel Revisar(ServicioModel service)
     {

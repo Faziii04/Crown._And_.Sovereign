@@ -52,7 +52,7 @@ public static class EstanciaRepositorio
     }
 
     /// <summary>Pasa la asignación de la reserva a otra habitación: huéspedes, estados de ambas habitaciones, historial y el registro del cambio. Devuelve el id del cambio.</summary>
-    public static int RegistrarCambioHabitacion(int reservaId, int habitacionOrigen, int habitacionDestino, int asignacionAnterior, int asignacionNueva, IEnumerable<int> huespedes, string motivo)
+    public static int RegistrarCambioHabitacion(int reservaId, int habitacionOrigen, int habitacionDestino, int asignacionAnterior, int asignacionNueva, IEnumerable<int> huespedes, string motivo, string observaciones)
     {
         if (!Persistencia.Activa) return 0;
         int cambioId = 0;
@@ -67,11 +67,11 @@ public static class EstanciaRepositorio
                 Parametro("nueva", asignacionNueva), Parametro("destino", habitacionDestino), Parametro("anterior", asignacionAnterior), Parametro("reserva", reservaId));
 
             cambioId = Convert.ToInt32(Escalar(conexion, transaccion,
-                @"INSERT INTO public.cambio_habitacion (reserva_id, estancia_id, reserva_habitacion_id, habitacion_origen_id, habitacion_destino_id, usuario_id, motivo)
-                  VALUES (@reserva, (SELECT estancia_id FROM public.estancia WHERE reserva_id = @reserva), @nueva, @origen, @destino, @usuario, @motivo)
+                @"INSERT INTO public.cambio_habitacion (reserva_id, estancia_id, reserva_habitacion_id, habitacion_origen_id, habitacion_destino_id, usuario_id, motivo, observaciones)
+                  VALUES (@reserva, (SELECT estancia_id FROM public.estancia WHERE reserva_id = @reserva), @nueva, @origen, @destino, @usuario, @motivo, @observaciones)
                   RETURNING cambio_id",
                 Parametro("reserva", reservaId), Parametro("nueva", asignacionNueva), Parametro("origen", habitacionOrigen), Parametro("destino", habitacionDestino),
-                Parametro("usuario", Infrastructure.SesionActual.Usuario?.Id ?? throw new InvalidOperationException("Inicia sesión para cambiar de habitación.")), Parametro("motivo", motivo)));
+                Parametro("usuario", Infrastructure.SesionActual.Usuario?.Id ?? throw new InvalidOperationException("Inicia sesión para cambiar de habitación.")), Parametro("motivo", motivo), Parametro("observaciones", Persistencia.NuloSiVacio(observaciones))));
             foreach (var huesped in huespedesCambio)
                 Ejecutar(conexion, transaccion, "INSERT INTO public.cambio_habitacion_huesped (cambio_id, huesped_id) VALUES (@cambio, @huesped)",
                     Parametro("cambio", cambioId), Parametro("huesped", huesped));
