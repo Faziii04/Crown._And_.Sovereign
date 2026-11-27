@@ -31,6 +31,7 @@ public partial class ServiciosAdicionalesReservaControl : UserControl
                 return new ServicioAdicionalOpcion
                 {
                     Servicio = service, Categoria = service.PadreId is int parentId ? $"{service.Categoria} / {serviceCatalog.FirstOrDefault(parent => parent.Id == parentId)?.Nombre ?? "Otro"}" : service.Categoria,
+                    Proveedor = string.Join(" · ", new ConvenioService().CompararProveedores(service.Id).Select(provider => provider.Convenio.Empresa)),
                     Cobertura = benefit.Coverage,
                     Incluidos = included, IncluidoIlimitado = unlimited, Cantidad = line?.Cantidad ?? 0,
                     PrecioUnitarioAcordado = line is null ? service.Precio : line.PrecioUnitarioAcordado,

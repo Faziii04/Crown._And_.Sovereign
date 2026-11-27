@@ -25,6 +25,16 @@ public partial class CorreccionesFinancierasControl : UserControl
             _ = manager;
         }
     }
+    public void MostrarCorreccion(string tipo, int id)
+    {
+        StateBox.SelectedItem = "Pendiente";
+        Recargar();
+        var row = _service.Listar("Pendiente").FirstOrDefault(item => item.Tipo == tipo && item.Id == id);
+        if (row is null) return;
+        CorrectionsGrid.SelectedItem = row;
+        CorrectionsGrid.ScrollIntoView(row);
+        CorrectionsGrid.Focus();
+    }
     private void Filter_Changed(object sender, SelectionChangedEventArgs e) { if (IsLoaded) Recargar(); }
     private void CorrectionRow_Loading(object? sender, DataGridRowEventArgs e)
     {

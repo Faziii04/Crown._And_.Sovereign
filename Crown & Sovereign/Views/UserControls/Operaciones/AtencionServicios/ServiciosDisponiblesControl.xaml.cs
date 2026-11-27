@@ -13,13 +13,13 @@ public partial class ServiciosDisponiblesControl : UserControl
     public void Mostrar(int guestId)
     {
         var stay=SampleData.Estancias.First(item=>item.HuespedId==guestId&&item.Estado=="Activa");
-        DataContext = SampleData.Servicios.Where(service => service.Activo && service.Reservable).Select(service =>
+        DataContext = SampleData.Servicios.Where(service => service.Reservable).Select(service =>
         {
-            var benefit=new ServicioBeneficioService().Evaluar(stay.Id,service.Id);
+            var benefit=new ServicioBeneficioService().Evaluar(stay.Id,service.Id,huespedId:guestId);
             var coverage=benefit.Label;
             var price=benefit.EstimatedCharge==0?"Sin cargo adicional estimado":$"Estimado Bs {benefit.EstimatedCharge:N2}";
-            return new ServiceUsageCard(service, coverage, price, service.RequiereCita ? "Programar cita" : "Registrar utilización",benefit.Detail,benefit.Available);
-        }).GroupBy(card => card.Service.Categoria).SelectMany(group => group).ToList();
+            return (Service:service, Benefit:benefit, Card:new ServiceUsageCard(service, coverage, price, service.RequiereCita ? "Programar cita" : "Registrar utilización",benefit.Detail,benefit.Available));
+        }).Where(item=>item.Service.Activo||item.Benefit.PurchasedRemaining>0||item.Benefit.Remaining>0||item.Benefit.CoverageType=="Ilimitado").Select(item=>item.Card).GroupBy(card => card.Service.Categoria).SelectMany(group => group).ToList();
     }
     private void Register_Click(object sender, RoutedEventArgs e) { if (sender is Button { Tag: ServicioModel service }) UtilizacionSolicitada?.Invoke(service); }
 }

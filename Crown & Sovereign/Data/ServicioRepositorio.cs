@@ -24,9 +24,10 @@ public static class ServicioRepositorio
 
             if (cita is not null)
                 Ejecutar(conexion, transaccion,
-                    "INSERT INTO public.cita_servicio (cita_id, reserva_servicio_id, fecha_hora, duracion, estado) VALUES (@id, @solicitud, @inicio, @duracion, @estado)",
+                    "INSERT INTO public.cita_servicio (cita_id, reserva_servicio_id, fecha_hora, duracion, estado, politica_aplicada) VALUES (@id, @solicitud, @inicio, @duracion, @estado, CAST(@policy AS jsonb))",
                     Parametro("id", cita.Id), Parametro("solicitud", solicitud.Id), Parametro("inicio", cita.Inicio),
-                    Parametro("duracion", (int)(cita.Fin - cita.Inicio).TotalMinutes), Parametro("estado", Traducciones.EstadoSolicitudBase(cita.Estado)));
+                    Parametro("duracion", (int)(cita.Fin - cita.Inicio).TotalMinutes), Parametro("estado", Traducciones.EstadoSolicitudBase(cita.Estado)),
+                    Parametro("policy", string.IsNullOrWhiteSpace(cita.PoliticaAplicadaJson) ? null : cita.PoliticaAplicadaJson));
 
             if (traslado is not null)
                 Ejecutar(conexion, transaccion,

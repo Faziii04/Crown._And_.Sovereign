@@ -1,0 +1,53 @@
+<Window x:Class="Crown___Sovereign.Views.Dialogs.Gerencia.Convenios.ConvenioDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Convenio con proveedor" Width="1080" Height="760" MinWidth="900" MinHeight="620"
+        WindowStartupLocation="CenterOwner" Background="{StaticResource Canvas}" FontFamily="Segoe UI">
+    <Grid Margin="22">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <StackPanel Margin="0,0,0,14">
+            <TextBlock x:Name="TitleText" Text="Nuevo convenio" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource Ink}"/>
+            <TextBlock Text="Registra el acuerdo comercial y los servicios que el proveedor puede prestar al hotel." Foreground="{StaticResource Muted}" Margin="0,4,0,0" TextWrapping="Wrap"/>
+        </StackPanel>
+        <TabControl x:Name="Steps" Grid.Row="1" SelectionChanged="Steps_SelectionChanged">
+            <TabItem Header="1 · Convenio y proveedor">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"><Grid Margin="20" MaxWidth="900" HorizontalAlignment="Left">
+                    <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <StackPanel Margin="0,0,12,13"><TextBlock Text="Nombre del convenio" FontWeight="SemiBold"/><TextBox x:Name="AgreementName" Margin="0,5,0,0"/></StackPanel>
+                    <StackPanel Grid.Column="1" Margin="12,0,0,13"><TextBlock Text="Empresa proveedora" FontWeight="SemiBold"/><TextBox x:Name="CompanyName" Margin="0,5,0,0"/></StackPanel>
+                    <StackPanel Grid.Row="1" Margin="0,0,12,13"><TextBlock Text="Tipo de proveedor" FontWeight="SemiBold"/><ComboBox x:Name="ProviderType" Margin="0,5,0,0" IsEditable="True"/></StackPanel>
+                    <StackPanel Grid.Row="1" Grid.Column="1" Margin="12,0,0,13"><TextBlock Text="Vigencia" FontWeight="SemiBold"/><Grid Margin="0,5,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions><DatePicker x:Name="StartDate"/><TextBlock Grid.Column="1" Text="hasta" VerticalAlignment="Center" Margin="8,0" Foreground="{StaticResource Muted}"/><DatePicker x:Name="EndDate" Grid.Column="2"/></Grid></StackPanel>
+                    <StackPanel Grid.Row="2" Grid.ColumnSpan="2" Margin="0,0,0,13"><TextBlock Text="Descripción" FontWeight="SemiBold"/><TextBox x:Name="Description" Margin="0,5,0,0" MinHeight="54" TextWrapping="Wrap" AcceptsReturn="True"/></StackPanel>
+                    <StackPanel Grid.Row="3" Margin="0,0,12,13"><TextBlock Text="Persona de contacto" FontWeight="SemiBold"/><TextBox x:Name="ContactName" Margin="0,5,0,0"/></StackPanel>
+                    <StackPanel Grid.Row="3" Grid.Column="1" Margin="12,0,0,13"><TextBlock Text="Teléfono" FontWeight="SemiBold"/><TextBox x:Name="Phone" Margin="0,5,0,0"/></StackPanel>
+                    <StackPanel Grid.Row="4" Margin="0,0,12,13"><TextBlock Text="Correo" FontWeight="SemiBold"/><TextBox x:Name="Email" Margin="0,5,0,0"/></StackPanel>
+                    <StackPanel Grid.Row="4" Grid.Column="1" Margin="12,0,0,13"><TextBlock Text="Dirección" FontWeight="SemiBold"/><TextBox x:Name="Address" Margin="0,5,0,0"/></StackPanel>
+                    <StackPanel Grid.Row="5" Grid.ColumnSpan="2" Margin="0,0,0,13"><TextBlock Text="Condiciones comerciales" FontWeight="SemiBold"/><TextBox x:Name="Terms" Margin="0,5,0,0" MinHeight="70" TextWrapping="Wrap" AcceptsReturn="True"/></StackPanel>
+                    <StackPanel Grid.Row="6" Grid.ColumnSpan="2"><TextBlock Text="Logo (URL opcional)" FontWeight="SemiBold"/><TextBox x:Name="LogoUrl" Margin="0,5,0,0"/><CheckBox x:Name="ActiveCheck" Content="Convenio activo para coordinación" IsChecked="True" Margin="0,12,0,0"/></StackPanel>
+                </Grid></ScrollViewer>
+            </TabItem>
+            <TabItem Header="2 · Servicios y costos">
+                <Grid Margin="18"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <StackPanel><TextBlock Text="Servicios del catálogo del hotel" FontSize="19" FontWeight="SemiBold"/><TextBlock Text="Marca solo los servicios que este proveedor puede prestar. El precio oficial al huésped no se modifica." Foreground="{StaticResource Muted}" Margin="0,3,0,10" TextWrapping="Wrap"/></StackPanel>
+                    <DockPanel Grid.Row="1" Margin="0,0,0,8"><TextBox x:Name="ServiceSearch" Width="340" HorizontalAlignment="Left" ToolTip="Buscar servicio o categoría" TextChanged="ServiceSearch_TextChanged"/><TextBlock x:Name="ServiceCount" DockPanel.Dock="Right" Foreground="{StaticResource Primary}" VerticalAlignment="Center"/></DockPanel>
+                    <DataGrid x:Name="ServicesGrid" Grid.Row="2" AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column" IsReadOnly="False" SelectionMode="Single" GridLinesVisibility="Horizontal">
+                        <DataGrid.Columns>
+                            <DataGridCheckBoxColumn Header="Asociar" Binding="{Binding Seleccionado, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="68"/>
+                            <DataGridTextColumn Header="Servicio" Binding="{Binding Nombre}" IsReadOnly="True" Width="*"/>
+                            <DataGridTextColumn Header="Categoría" Binding="{Binding Categoria}" IsReadOnly="True" Width="120"/>
+                            <DataGridTextColumn Header="Precio huésped" Binding="{Binding PrecioOficial, StringFormat=Bs {0:N2}}" IsReadOnly="True" Width="115"/>
+                            <DataGridTextColumn Header="Costo (Bs)" Binding="{Binding Costo, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, StringFormat=N2}" Width="105"/>
+                            <DataGridTextColumn Header="Margen estimado" Binding="{Binding Margen, StringFormat=Bs {0:N2}}" IsReadOnly="True" Width="125"/>
+                            <DataGridTextColumn Header="Condición por servicio" Binding="{Binding Observaciones, UpdateSourceTrigger=PropertyChanged}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+            <TabItem Header="3 · Confirmación">
+                <ScrollViewer><StackPanel Margin="26" MaxWidth="800" HorizontalAlignment="Left"><TextBlock Text="Revisa el convenio" FontSize="21" FontWeight="SemiBold"/><TextBlock x:Name="ReviewCompany" FontSize="18" FontWeight="SemiBold" Margin="0,14,0,2"/><TextBlock x:Name="ReviewName" Foreground="{StaticResource Muted}"/><TextBlock x:Name="ReviewPeriod" Margin="0,8,0,14"/><Border Background="White" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="8" Padding="14"><StackPanel><TextBlock Text="Servicios asociados y margen estimado" FontWeight="SemiBold"/><ItemsControl x:Name="ReviewServices" Margin="0,8,0,0"><ItemsControl.ItemTemplate><DataTemplate><Grid Margin="0,4"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="{Binding Nombre}" FontWeight="SemiBold"/><TextBlock Text="{Binding EstadoMargen}" Foreground="{StaticResource Warning}" FontSize="11"/></StackPanel><TextBlock Grid.Column="1" Text="{Binding Margen, StringFormat=Bs {0:N2}}" VerticalAlignment="Center"/></Grid></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></StackPanel></Border><TextBlock Text="El margen es precio aplicado al huésped menos costo registrado del proveedor. No representa utilidad neta ni un pago efectuado." Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,14,0,0"/></StackPanel></ScrollViewer>
+            </TabItem>
+        </TabControl>
+        <DockPanel Grid.Row="2" Margin="0,12,0,0"><TextBlock x:Name="ErrorText" Foreground="{StaticResource Danger}" VerticalAlignment="Center" TextWrapping="Wrap"/><StackPanel DockPanel.Dock="Right" Orientation="Horizontal"><Button Content="Cancelar" IsCancel="True" Style="{StaticResource SecondaryButton}" Padding="16,7" Margin="0,0,8,0"/><Button x:Name="BackButton" Content="Anterior" Style="{StaticResource SecondaryButton}" Padding="16,7" Margin="0,0,8,0" Click="Back_Click" Visibility="Collapsed"/><Button x:Name="NextButton" Content="Siguiente" Padding="20,7" Click="Next_Click"/><Button x:Name="SaveButton" Content="Guardar convenio" Padding="20,7" Click="Save_Click" Visibility="Collapsed"/></StackPanel></DockPanel>
+    </Grid>
+</Window>

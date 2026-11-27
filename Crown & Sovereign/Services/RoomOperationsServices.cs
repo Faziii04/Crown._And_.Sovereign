@@ -76,7 +76,9 @@ public sealed partial class HabitacionService
     private static HabitacionOperacionModel Proyectar(HabitacionModel room)
     {
         var incidents = SampleData.Incidencias.Where(item => item.Habitacion == room.Id && item.Estado != "Resuelta").OrderByDescending(item => item.Prioridad == "Urgente").ThenByDescending(item => item.FechaReporte).ToList();
-        var blocked = room.Bloqueada || incidents.Any(item => item.BloqueaHabitacion);
+        // A reported incident that requests a restriction is not itself an active room blockage.
+        // The room's operational block flag is the current source of truth in this prototype.
+        var blocked = room.Bloqueada;
         var activeLink = SampleData.ReservaHabitaciones.Where(link => link.HabitacionId == room.Id)
             .Select(link => (Link: link, Reservation: SampleData.Reservas.FirstOrDefault(reservation => reservation.Id == link.ReservaId)))
             .Where(item => item.Reservation is { Estado: "En estancia" }).OrderBy(item => item.Reservation!.Salida).FirstOrDefault();
@@ -105,7 +107,7 @@ public sealed partial class HabitacionService
         else if (task?.Estado == "Inspeccionada") cleaning = "Limpia";
         else if (string.IsNullOrWhiteSpace(cleaning)) cleaning = "Sin verificar";
         var occupied = activeLink.Reservation is not null || room.Estado == "Ocupada";
-        var precaution = incidents.Any(item => item.RequiereRevisionOperativa);
+        var precaution = incidents.Any(item => item.RequiereRevisionOperativa || item.BloqueaHabitacion && !room.Bloqueada);
         var maintenance = blocked ? "Bloqueada" : incidents.Count > 0 ? "Incidencia abierta · no bloqueante" : "Operativa";
         var classification = blocked ? "Bloqueada" : occupied ? "Ocupada" : cleaning == "Limpia" && !precaution ? "Lista para ingreso" : "Por preparar";
         return new HabitacionOperacionModel { Habitacion = room, Clasificacion = classification, Ocupada = occupied, Bloqueada = blocked,
@@ -124,6 +126,27 @@ public sealed class NotificacionService
         var notificacion = new NotificacionModel(id, mensaje, destino, DateTime.Now, false);
         EsperaRepositorio.InsertarNotificacion(notificacion);
         SampleData.Notificaciones.Insert(0, notificacion);
+    }
+
+    public IReadOnlyList<NotificacionModel> Listar(string rol) => SampleData.Notificaciones
+        .Where(item => item.Destino.Equals(rol, StringComparison.OrdinalIgnoreCase) || item.Destino.Equals("Todos", StringComparison.OrdinalIgnoreCase))
+        .OrderByDescending(item => item.Fecha).ToList();
+
+    public void MarcarLeida(int id)
+    {
+        var index = SampleData.Notificaciones.FindIndex(item => item.Id == id);
+        if (index >= 0) SampleData.Notificaciones[index] = SampleData.Notificaciones[index] with { Leida = true };
+    }
+
+    public void Crear(string mensaje, string destino, string modulo, string tipoRegistro, int? registroId)
+    {
+        var id = SampleData.Notificaciones.Count == 0 ? 1 : SampleData.Notificaciones.Max(item => item.Id) + 1;
+        SampleData.Notificaciones.Insert(0, new(id, mensaje, destino, DateTime.Now, false)
+        {
+            ModuloDestino = modulo,
+            TipoRegistroDestino = tipoRegistro,
+            RegistroDestinoId = registroId
+        });
     }
 }
 

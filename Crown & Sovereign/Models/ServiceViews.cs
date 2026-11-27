@@ -11,7 +11,10 @@ public sealed record ServiceUsageCard(ServicioModel Service, string Coverage, st
 public sealed record AppointmentQueueRow(int Id, DateTime Start, DateTime End, string Service, string Guest, string Room, string Employee, string Status, string Category);
 public sealed class ServiceTreeNode
 {
-    public ServicioModel Service { get; init; } = null!;
-    public string Name => Service.Nombre;
+    public ServicioModel? Service { get; init; }
+    public bool EsCategoria { get; init; }
+    public string Name => EsCategoria ? Service?.Categoria ?? Categoria : Service?.Nombre ?? Categoria;
+    public string Categoria { get; init; } = "";
+    public string Estado => EsCategoria ? "" : Service is null ? "" : !Service.Activo ? "Inactivo" : Service.Reservable ? Service.RequiereCita ? "Cita" : "Reservable" : "Agrupación";
     public IReadOnlyList<ServiceTreeNode> Children { get; init; } = [];
 }

@@ -22,21 +22,25 @@ public sealed class ServicioBeneficioService
         foreach(var relationship in SampleData.PaquetesServicios.Where(item=>item.PaqueteId==purchase.PaqueteId))
             if(!SampleData.ReservaPaqueteServicios.Any(item=>item.ReservaId==reservationId&&item.PaqueteId==purchase.PaqueteId&&item.ServicioId==relationship.ServicioId))
                 SampleData.ReservaPaqueteServicios.Add(new(reservationId,purchase.PaqueteId,relationship.ServicioId,relationship.TipoCobertura,relationship.LimiteUsos,relationship.Compartido));
-        foreach(var purchase in SampleData.ReservaPaquetes.Where(item=>item.ReservaId==reservationId&&item.PaqueteId==2))
-        foreach(var product in SampleData.ServiciosProductos.Where(item=>item.ServicioId==10))
-            if(!SampleData.ReservaPaqueteServicioProductos.Any(item=>item.ReservaId==reservationId&&item.PaqueteId==purchase.PaqueteId&&item.ServicioId==10&&item.ProductoId==product.ProductoId))
-                SampleData.ReservaPaqueteServicioProductos.Add(new(reservationId,purchase.PaqueteId,10,product.ProductoId,product.CantidadIncluida));
+        foreach(var purchase in SampleData.ReservaPaquetes.Where(item=>item.ReservaId==reservationId))
+        foreach(var relationship in SampleData.ReservaPaqueteServicios.Where(item=>item.ReservaId==reservationId&&item.PaqueteId==purchase.PaqueteId))
+        foreach(var product in SampleData.ServiciosProductos.Where(item=>item.ServicioId==relationship.ServicioId))
+            if(!SampleData.ReservaPaqueteServicioProductos.Any(item=>item.ReservaId==reservationId&&item.PaqueteId==purchase.PaqueteId&&item.ServicioId==relationship.ServicioId&&item.ProductoId==product.ProductoId))
+                SampleData.ReservaPaqueteServicioProductos.Add(new(reservationId,purchase.PaqueteId,relationship.ServicioId,product.ProductoId,product.CantidadIncluida));
     }
 
-    public ServiceBenefitEvaluation Evaluar(int estanciaId, int servicioId, DateTime? fecha = null)
+    public ServiceBenefitEvaluation Evaluar(int estanciaId, int servicioId, DateTime? fecha = null, int? huespedId = null)
     {
         var stay = SampleData.Estancias.FirstOrDefault(item => item.Id == estanciaId && item.Estado == "Activa")
             ?? throw new InvalidOperationException("No se encontró la estancia activa.");
-        var guest = SampleData.Huespedes.First(item => item.Id == stay.HuespedId);
+        var guestId = huespedId ?? stay.HuespedId;
+        if (guestId != stay.HuespedId && !SampleData.ReservaHuespedes.Any(item => item.ReservaId == stay.ReservaId && item.HuespedId == guestId))
+            throw new InvalidOperationException("El huésped no pertenece a la reserva seleccionada.");
+        var guest = SampleData.Huespedes.First(item => item.Id == guestId);
         var service = SampleData.Servicios.First(item => item.Id == servicioId);
         var acquired = SampleData.ServiciosAdquiridos.Where(item => item.ReservaId == stay.ReservaId && item.ServicioId == servicioId && item.Estado is "ADQUIRIDO" or "CUMPLIDO" && (item.HuespedId is null || item.HuespedId == guest.Id)).ToList();
         var acquiredAllowance = acquired.Sum(item => item.Cantidad);
-        var acquiredUsed = SampleData.UsosServicio.Count(item => item.EstanciaId is int usageStayId && SampleData.Estancias.Any(usageStay => usageStay.Id == usageStayId && usageStay.ReservaId == stay.ReservaId) && item.ServicioId == servicioId && item.ServicioAdquiridoId is not null && acquired.Any(line => line.ServicioAdquiridoId == item.ServicioAdquiridoId) && item.Estado is "Completado" or "Confirmado");
+        var acquiredUsed = SampleData.UsosServicio.Count(item => item.EstanciaId is int usageStayId && SampleData.Estancias.Any(usageStay => usageStay.Id == usageStayId && usageStay.ReservaId == stay.ReservaId) && item.ServicioId == servicioId && item.ServicioAdquiridoId is not null && acquired.Any(line => line.ServicioAdquiridoId == item.ServicioAdquiridoId && (line.HuespedId is null || line.HuespedId == item.HuespedId)) && item.Estado is "Completado" or "Confirmado");
         var acquiredRemaining = Math.Max(0, acquiredAllowance - acquiredUsed);
         var purchases = SampleData.ReservaPaquetes.Where(item => item.ReservaId == stay.ReservaId).ToList();
         var snapshots = purchases.SelectMany(purchase => SampleData.ReservaPaqueteServicios
@@ -49,7 +53,7 @@ public sealed class ServicioBeneficioService
             .Sum(item => item.Benefit.LimiteUsos!.Value * Math.Max(1, item.Purchase.Cantidad));
         var shared = snapshots.Any(item => item.Benefit.Compartido);
         var usage = SampleData.UsosServicio.Where(item => item.ServicioId == servicioId && item.Incluido && item.EstanciaId is int useStayId &&
-            SampleData.Estancias.Any(useStay => useStay.Id == useStayId && useStay.ReservaId == stay.ReservaId && (shared || useStay.Id == stay.Id)));
+            SampleData.Estancias.Any(useStay => useStay.Id == useStayId && useStay.ReservaId == stay.ReservaId && (shared || item.HuespedId == guest.Id)));
         var period = snapshots.Where(item => item.Benefit.TipoCobertura.Contains("día", StringComparison.OrdinalIgnoreCase)).ToList();
         if (period.Count > 0)
         {
@@ -71,7 +75,8 @@ public sealed class ServicioBeneficioService
         if (acquiredRemaining > 0 && (unlimited || remaining > 0)) label += unlimited ? " · más beneficio ilimitado" : $" · {remaining} uso(s) de paquete";
         if (acquiredRemaining > 0) detail += $" {acquiredRemaining} sesión(es) adquirida(s) previamente siguen disponibles; la compra no requiere otro cargo.";
         else if (acquiredAllowance > 0) detail += $" Se adquirieron {acquiredAllowance} sesión(es) y ya se utilizaron {acquiredUsed}.";
+        var availableByEntitlement = acquiredRemaining > 0 || covered;
         return new(guest.Id, stay.Id, stay.ReservaId, service.Id, type, packageText, allowance, consumed, remaining, shared,
-            service.RequiereCita, service.DuracionMinutos, acquiredRemaining > 0 ? 0m : charge, label, detail, service.Activo && service.Reservable && service.Disponible, acquiredAllowance, acquiredUsed, acquiredRemaining);
+            service.RequiereCita, service.DuracionMinutos, acquiredRemaining > 0 ? 0m : charge, label, detail, (service.Activo && service.Reservable) || availableByEntitlement, acquiredAllowance, acquiredUsed, acquiredRemaining);
     }
 }

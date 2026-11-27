@@ -136,7 +136,7 @@ public sealed partial class HuespedService
             var service = SampleData.Servicios.FirstOrDefault(entry => entry.Id == item.ServicioId);
             var appointment = SampleData.Citas.FirstOrDefault(entry => entry.HuespedId == guestId && entry.ServicioId == item.ServicioId && entry.Inicio.Date == item.FechaDeseada?.Date);
             var room = Obtener(guestId)?.Habitacion is int roomId && roomId > 0 ? SampleData.Habitaciones.FirstOrDefault(entry => entry.Id == roomId) : null;
-            var coverage = Obtener(guestId)?.Paquete == "Sin paquete" ? "No incluido según el perfil" : service?.Cobertura ?? "No disponible";
+            var coverage = !string.IsNullOrWhiteSpace(item.CoberturaEstimada) ? item.CoberturaEstimada : Obtener(guestId)?.Paquete == "Sin paquete" ? "No incluido según el perfil" : "Cobertura histórica no registrada";
             return new SolicitudServicioHuespedFila(item, service?.Nombre ?? "Servicio no disponible", service?.Categoria ?? "—", room?.Numero ?? "—", appointment is null ? "Sin cita asignada" : $"{appointment.Inicio:dd/MM HH:mm} · {appointment.Estado}", coverage);
         }).ToList();
 

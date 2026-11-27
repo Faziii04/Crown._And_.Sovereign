@@ -1,4 +1,5 @@
 using System.Windows.Controls;
+using Crown___Sovereign.Data;
 
 namespace Crown___Sovereign.Views.UserControls.Recepcion.Reservas.Wizard;
 
@@ -9,5 +10,5 @@ public partial class PasoEstanciaControl : UserControl
     public ComboBox Channel => ChannelPicker;
     public TextBlock Duration => StayDuration;
     public TextBox GuestCount => GuestCountBox;
-    public PasoEstanciaControl() { InitializeComponent(); ChannelPicker.ItemsSource = new[] { "Directa", "Agencia", "Teléfono", "Sitio web" }; ChannelPicker.SelectedIndex = 0; }
+    public PasoEstanciaControl() { InitializeComponent(); ChannelPicker.ItemsSource = SampleData.CanalesReserva.Select(item=>item.Nombre).ToList(); ChannelPicker.SelectedIndex = 0; }
 }

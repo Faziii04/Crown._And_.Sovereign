@@ -1,20 +1,36 @@
+using System.Windows;
 using System.Windows.Controls;
-using Crown___Sovereign.Data;
+using Crown___Sovereign.Models;
 using Crown___Sovereign.Services;
 
 namespace Crown___Sovereign.Views.UserControls.Gerencia.Dashboard;
 
 public partial class GerenciaDashboardControl : UserControl
 {
+    private readonly DashboardService _service = new();
+    private DashboardPeriod _period = DashboardService.PeriodoPredeterminado();
+    public event EventHandler<string>? NavigationRequested;
+    public event EventHandler<DashboardDecision>? CorrectionReviewRequested;
     public GerenciaDashboardControl()
     {
         InitializeComponent();
-        var metrics = new DashboardService().Gerencia();
-        DataContext = new
-        {
-            Metricas = metrics,
-            Distribucion = new[] { new { Nombre = "Alojamiento", Monto = "Bs 112.400", Porcentaje = 68d }, new { Nombre = "Servicios", Monto = "Bs 31.800", Porcentaje = 42d }, new { Nombre = "Alimentos y bebidas", Monto = "Bs 24.600", Porcentaje = 34d }, new { Nombre = "Otros", Monto = "Bs 15.520", Porcentaje = 22d } },
-            Autorizaciones = new[] { "2 solicitudes requieren revisión", $"{SampleData.Incidencias.Count(i => i.BloqueaHabitacion)} habitaciones bloqueadas por mantenimiento", $"{SampleData.Productos.Count(p => p.Stock <= p.StockMinimo)} productos bajo el mínimo de stock" }
-        };
+        DecisionPanel.CorrectionReviewRequested += (_, item) => CorrectionReviewRequested?.Invoke(this, item);
+        CommercialPanel.NavigationRequested += (_, destination) => NavigationRequested?.Invoke(this, destination);
+        OperationsPanel.SectionRequested += (_, section) => NavigationRequested?.Invoke(this, $"Operaciones|{section}");
+        LoadSummary();
     }
+    private void PeriodFilter_PeriodChanged(object? sender, DashboardPeriod e) { _period = e; LoadSummary(); }
+    private void LoadSummary()
+    {
+        var summary = _service.Gerencia(_period);
+        MetricCards.ItemsSource = summary.Metricas;
+        FinancialPanel.Cargar(summary);
+        DecisionPanel.Cargar(summary.Decisiones);
+        OperationsPanel.Cargar(summary.Operacion, summary.Alertas);
+        CommercialPanel.Cargar(summary.Comercial, summary.ReservasPorCanal);
+        NotesText.Text = $"{summary.NotaIngresos} {summary.NotaReservas} {summary.NotaOcupacion} Llegadas y salidas cuentan reservas, no personas. Los servicios completados son volumen de uso; los ingresos de servicios provienen solo de cargos elegibles.";
+    }
+    private void Reports_Click(object sender, RoutedEventArgs e) => NavigationRequested?.Invoke(this, "Reportes");
+    private void DecisionPanel_DecisionsRequested(object? sender, EventArgs e) => NavigationRequested?.Invoke(this, "Finanzas");
+    private void OperationsPanel_ModuleRequested(object? sender, EventArgs e) => NavigationRequested?.Invoke(this, "Operaciones");
 }

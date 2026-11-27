@@ -19,7 +19,23 @@ public partial class GestionarCitaDialog : Window
     }
     private void Primary_Click(object sender, RoutedEventArgs e)
     {
-        try { if (_appointment.Estado == "En curso") _service.Completar(_appointment.Id); else _service.Iniciar(_appointment.Id); DialogResult = true; }
+        try
+        {
+            if (_appointment.Estado == "En curso")
+            {
+                var service = SampleData.Servicios.First(item => item.Id == _appointment.ServicioId);
+                int? agreementId = null;
+                if (new ConvenioService().EsExterno(service.Id))
+                {
+                    var selector = new SeleccionarProveedorDialog(service.Id, _appointment.Inicio) { Owner = this };
+                    if (selector.ShowDialog() != true) return;
+                    agreementId = selector.ConvenioSeleccionadoId;
+                }
+                _service.Completar(_appointment.Id, agreementId);
+            }
+            else _service.Iniciar(_appointment.Id);
+            DialogResult = true;
+        }
         catch (Exception ex) { ValidationText.Text = ex.Message; }
     }
     private void Cancel_Click(object sender, RoutedEventArgs e)

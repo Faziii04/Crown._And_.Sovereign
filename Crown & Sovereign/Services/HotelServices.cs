@@ -91,14 +91,14 @@ public sealed class ReservaService
         var draft = new BorradorReserva
         {
             Llegada = reservation.Llegada, Salida = reservation.Salida, PaqueteId = package?.PaqueteId,
-            CantidadPaquete = package?.Cantidad ?? 1, PrecioPaqueteAcordado = package?.PrecioCompra, PromocionId = reservation.PromocionId
+            CantidadPaquete = package?.Cantidad ?? 1, PrecioPaqueteAcordado = package?.PrecioCompra, PromocionId = reservation.PromocionId, Canal=reservation.Canal
         };
         draft.HabitacionesSeleccionadas.AddRange(rooms);
         draft.RecursosAdicionales.AddRange(SampleData.ReservaRecursos.Where(item => item.ReservaId == reservation.Id).Select(item => new ReservaRecursoBorrador
         { RecursoId = item.RecursoId, Cantidad = item.Cantidad, PrecioUnitarioAcordado = item.PrecioUnitarioAcordado, TipoCobroAplicado = item.TipoCobroAplicado }));
         draft.ServiciosAdquiridos.AddRange(SampleData.ServiciosAdquiridos.Where(item => item.ReservaId == reservation.Id).Select(item => new ServicioAdquiridoBorrador
         { ServicioId = item.ServicioId, Cantidad = item.Cantidad, PrecioUnitarioAcordado = item.PrecioUnitarioAcordado, HuespedId = item.HuespedId }));
-        return new TarifaService().CalcularResumenEconomico(draft);
+        return new TarifaService().CalcularResumenEconomico(draft,reservation);
     }
     public IReadOnlyList<string> ObtenerRecursosDePreparacion(int reservationId) => SampleData.ReservaRecursos
         .Where(item => item.ReservaId == reservationId && item.Estado is "PENDIENTE" or "ASIGNADO" or "SIN_VERIFICAR")
@@ -213,7 +213,7 @@ public sealed class ReservaService
                     _ when isArrivalToday=>"Ver reserva",
                     _=>"Ver reserva"
                 };
-                var estimated=rooms.Sum(room=>new TarifaService().CalcularAlojamiento(room,item.Llegada,item.Salida));
+                var estimated=rooms.Sum(room=>new TarifaService().CalcularAlojamiento(item,room,item.Llegada,item.Salida));
                 estimated+=SampleData.ReservaPaquetes.Where(link=>link.ReservaId==item.Id).Sum(link=>link.PrecioCompra*link.Cantidad);
                 var guests=SampleData.ReservaHuespedes.Count(link=>link.ReservaId==item.Id);
                 return new ReservationInboxRow(item.Id,item.Huesped,string.Join(", ",rooms.Select(room=>room.Numero)),rooms[0].Tipo,rooms[0].Piso,item.Llegada,item.Salida,(item.Salida.Date-item.Llegada.Date).Days,Math.Max(item.Personas,guests),item.Canal,item.Paquete,item.Estado,action,action=="Ver reserva"&&isArrivalToday?readiness:null,item.GrupoId.HasValue,estimated);
@@ -235,7 +235,7 @@ public sealed class ReservaService
         if(!NavigationService.Puede("Reservas")) throw new UnauthorizedAccessException("Tu rol no puede crear reservas.");
         if(fin<=inicio) throw new InvalidOperationException("La salida debe ser posterior a la llegada.");
         if(!new HabitacionService().ConsultarDisponibilidad(room,inicio,fin)) throw new InvalidOperationException("La habitación no está disponible para esas fechas.");
-        var r=new ReservaModel{Id=SampleData.Reservas.Max(x=>x.Id)+1,Huesped=guest,Habitacion=room,Llegada=inicio,Salida=fin,Estado="Confirmada",Canal="Directa"};SampleData.Reservas.Insert(0,r);return r;
+        var r=new ReservaModel{Id=SampleData.Reservas.Max(x=>x.Id)+1,Huesped=guest,Habitacion=room,Llegada=inicio,Salida=fin,Estado="Confirmada",Canal="Directa",FechaCreacion=DateTime.Now};r.AlojamientoNochesAcordadas.AddRange(CapturarNoches([room],inicio,fin,r.Canal));SampleData.Reservas.Insert(0,r);return r;
     }
     public ReservaModel CrearReserva(HuespedModel principal,int room,DateTime inicio,DateTime fin,IEnumerable<int> acompanantes)
     {
@@ -274,8 +274,10 @@ public sealed class ReservaService
             Paquete = SampleData.Paquetes.FirstOrDefault(item => item.Id == borrador.PaqueteId)?.Nombre ?? "Sin paquete",
             GrupoId = borrador.GrupoId,
             Personas = borrador.Personas,
-            PromocionId = borrador.PromocionId
+            PromocionId = borrador.PromocionId,
+            FechaCreacion = DateTime.Now
         };
+        reservation.AlojamientoNochesAcordadas.AddRange(CapturarNoches(roomIds,reservation.Llegada,reservation.Salida,reservation.Canal));
         SampleData.Reservas.Insert(0, reservation);
         SampleData.ReservaHuespedes.AddRange(guestIds.Select((id, index) => new ReservaHuespedModel(reservation.Id, id, index == 0)));
         var assignmentIds = new List<int>();
@@ -353,10 +355,16 @@ public sealed class ReservaService
         }
     }
 
-    public ResumenEconomicoReserva CalcularResumenEconomico(BorradorReserva borrador) => new TarifaService().CalcularResumenEconomico(borrador);
+    public ResumenEconomicoReserva CalcularResumenEconomico(BorradorReserva borrador) => new TarifaService().CalcularResumenEconomico(borrador,borrador.ReservaOrigenId is int id?SampleData.Reservas.FirstOrDefault(item=>item.Id==id):null);
 
     public void ValidarAdicionales(BorradorReserva borrador, IReadOnlyCollection<int> guestIds, int? reservationIdExcluir)
     {
+        if (borrador.PromocionId is int promotionId)
+        {
+            var promotion = SampleData.Promociones.FirstOrDefault(item => item.Id == promotionId);
+            if (promotion is null || !promotion.Activa || promotion.Desde.Date > borrador.Llegada.Date || promotion.Hasta.Date < borrador.Llegada.Date)
+                throw new InvalidOperationException("La promoción no está activa o no es válida para la fecha de llegada. Elige una campaña aplicable.");
+        }
         if (borrador.PaqueteId.HasValue && (borrador.CantidadPaquete is < 1 or > 5 || !SampleData.Paquetes.Any(item => item.Id == borrador.PaqueteId && item.Activo)))
             throw new InvalidOperationException("Revisa el paquete seleccionado y su cantidad.");
         if (borrador.PaqueteId is int packageId)
@@ -469,7 +477,8 @@ public sealed class ReservaService
         var wait=new ListaEsperaService().BuscarCoincidencias();
         return new(arrivals.Count,arrivals.Count(item=>item.Estado=="Confirmada"),departures.Count,departures.Count(item=>SampleData.Estancias.Any(stay=>stay.ReservaId==item.Id&&stay.Estado=="Activa")),tonight,SampleData.Habitaciones.Count,wait.Count,wait.Count(item=>item.HabitacionesCoincidentes>=item.Solicitud.Habitaciones));
     }
-    private static ReservationSearchCriteria Criterios(BorradorReserva draft)=>new(){Llegada=draft.Llegada,Salida=draft.Salida,Personas=draft.Personas,Habitaciones=draft.HabitacionesRequeridas,TipoHabitacion=draft.TipoPreferido,Comodidades=draft.Comodidades.ToList()};
+    private static List<PrecioAlojamientoAcordadoModel> CapturarNoches(IEnumerable<int> roomIds,DateTime llegada,DateTime salida,string canal){var tariff=new TarifaService();return roomIds.SelectMany(id=>{var room=SampleData.Habitaciones.First(item=>item.Id==id);return tariff.DesglosarAlojamiento(room,llegada,salida,canal).Select(night=>new PrecioAlojamientoAcordadoModel(id,night.Fecha,night.Precio));}).ToList();}
+    private static ReservationSearchCriteria Criterios(BorradorReserva draft)=>new(){Llegada=draft.Llegada,Salida=draft.Salida,Personas=draft.Personas,Habitaciones=draft.HabitacionesRequeridas,TipoHabitacion=draft.TipoPreferido,Canal=draft.Canal,Comodidades=draft.Comodidades.ToList()};
     private static string? CheckInReadiness(ReservaModel reservation,IReadOnlyList<HabitacionModel> rooms)
     {
         if(reservation.Estado=="Pendiente")return "Confirma la reserva antes del check-in.";
@@ -569,19 +578,19 @@ public sealed class SolicitudServicioService
         var service=SampleData.Servicios.FirstOrDefault(item=>item.Id==serviceId&&item.Activo&&item.Reservable)??throw new InvalidOperationException("El servicio no está disponible para solicitud.");
         if((service.RequiereCita||service.RequiereTraslado)&&fecha is null)throw new InvalidOperationException("Este servicio requiere fecha y hora deseadas.");
         if(fecha is DateTime desired&&desired<=DateTime.Now)throw new InvalidOperationException("La fecha deseada debe ser futura.");
-        var stay=SampleData.Estancias.FirstOrDefault(item=>item.Id==estanciaId&&item.HuespedId==guestId&&item.Estado=="Activa")??throw new InvalidOperationException("No se encontró la estancia activa de este huésped.");
+        var stay=SampleData.Estancias.FirstOrDefault(item=>item.Id==estanciaId&&item.Estado=="Activa"&&(item.HuespedId==guestId||SampleData.ReservaHuespedes.Any(link=>link.ReservaId==item.ReservaId&&link.HuespedId==guestId)))??throw new InvalidOperationException("El huésped no está asociado a la estancia activa seleccionada.");
         if(stay.CheckOut<=DateTime.Now)throw new InvalidOperationException("La estancia ya terminó.");
         if(fecha is DateTime preferred&&preferred.AddMinutes(service.DuracionMinutos)>=stay.CheckOut)throw new InvalidOperationException("El horario debe finalizar antes del checkout.");
         if(service.RequiereTraslado&&(string.IsNullOrWhiteSpace(origen)||string.IsNullOrWhiteSpace(destino)||pasajeros<1))throw new InvalidOperationException("Indica origen, destino y cantidad de pasajeros para coordinar el traslado.");
         if(SampleData.SolicitudesServicio.Any(item=>item.EstanciaId==stay.Id&&item.ServicioId==service.Id&&item.Estado is "Solicitada" or "Pendiente" or "Confirmada" or "En atención" or "En curso"&&item.FechaDeseada?.Date==fecha?.Date))throw new InvalidOperationException("Ya existe una solicitud activa para este servicio y fecha.");
-        var coverage=new ServicioBeneficioService().Evaluar(stay.Id,service.Id,fecha);
+        var coverage=new ServicioBeneficioService().Evaluar(stay.Id,service.Id,fecha,guestId);
         var request=new SolicitudServicioModel(Persistencia.SiguienteId("reserva_servicio","reserva_servicio_id",()=>SampleData.SolicitudesServicio.Count==0?1:SampleData.SolicitudesServicio.Max(item=>item.Id)+1),guest.Id,service.Id,DateTime.Now,fecha,descripcion,"Pendiente",service.RequiereCita)
         {EstanciaId=stay.Id,ReservaId=stay.ReservaId,UsuarioSolicitaId=SesionActual.Usuario?.Id??0,CoberturaEstimada=coverage.Label+(coverage.EstimatedCharge>0?$" · Bs {coverage.EstimatedCharge:N2}":" · Sin cargo estimado")};
         if(service.RequiereTraslado)request=request with{OrigenTraslado=origen.Trim(),DestinoTraslado=destino.Trim(),Pasajeros=pasajeros,ContactoTraslado=contacto.Trim()};
         CitaServicioModel? appointment=null;
         if(service.RequiereCita&&fecha is DateTime start)
         {
-            appointment=new CitaServicioModel(Persistencia.SiguienteId("cita_servicio","cita_id",()=>SampleData.Citas.Count==0?1:SampleData.Citas.Max(item=>item.Id)+1),guest.Id,service.Id,start,start.AddMinutes(service.DuracionMinutos),"Por asignar","Solicitada"){EstanciaId=stay.Id,SolicitudId=request.Id};
+            appointment=new CitaServicioModel(Persistencia.SiguienteId("cita_servicio","cita_id",()=>SampleData.Citas.Count==0?1:SampleData.Citas.Max(item=>item.Id)+1),guest.Id,service.Id,start,start.AddMinutes(service.DuracionMinutos),"Por asignar","Solicitada"){EstanciaId=stay.Id,SolicitudId=request.Id,PoliticaAplicadaJson=PoliticaHotelService.SnapshotActualServicio()};
             request=request with{Estado="Solicitada",CitaServicioId=appointment.Id};
         }
         var transfer=service.RequiereTraslado?new TrasladoModel(Persistencia.SiguienteId("traslado","traslado_id",()=>SampleData.Traslados.Count==0?1:SampleData.Traslados.Max(item=>item.Id)+1),guest.Id,origen.Trim(),destino.Trim(),fecha??DateTime.Now,"Solicitado"){EstanciaId=stay.Id,ServicioId=service.Id,SolicitudId=request.Id,Pasajeros=pasajeros,Observaciones=descripcion.Trim()}:null;
@@ -610,13 +619,13 @@ public sealed class SolicitudServicioService
         var responsible=responsableId is int id?SampleData.Empleados.FirstOrDefault(item=>item.Id==id&&item.Cargo=="Servicios"):null;
         SampleData.SolicitudesServicio[index]=request with{Estado="En atención",Aceptada=request.Aceptada??DateTime.Now,InicioAtencion=DateTime.Now,ResponsableId=responsible?.Id??request.ResponsableId,Responsable=responsible?.Nombre??request.Responsable};
     }
-    public void CompletarAtencion(int requestId)
+    public void CompletarAtencion(int requestId, int? convenioId = null)
     {
         if(!NavigationService.Puede("Atención de servicios"))throw new UnauthorizedAccessException("Solo el equipo de servicios confirma la entrega.");
         var request=SampleData.SolicitudesServicio.FirstOrDefault(item=>item.Id==requestId)??throw new InvalidOperationException("No se encontró la solicitud.");
         if(request.Estado!="En atención")throw new InvalidOperationException("Inicia la atención antes de registrar la entrega.");
         var service=SampleData.Servicios.First(item=>item.Id==request.ServicioId);var guest=SampleData.Huespedes.First(item=>item.Id==request.HuespedId);
-        new ServicioService().RegistrarUtilizacion(service,guest,false,request.EstanciaId,request.Id);
+        new ServicioService().RegistrarUtilizacion(service,guest,false,request.EstanciaId,request.Id,convenioId,request.FechaDeseada);
     }
 }
 public sealed class CitaServicioService
@@ -631,17 +640,27 @@ public sealed class CitaServicioService
             .Where(item=>string.IsNullOrWhiteSpace(empleado)||empleado=="Todo el personal"||item.Employee==empleado)
             .OrderBy(item=>item.Start).ToList();
     }
+    public bool TieneConflictoHorario(string responsable, DateTime inicio, DateTime fin, int? excluirCitaId = null)
+        => HasConflict(responsable, inicio, fin, excluirCitaId);
+    public bool EsResponsableElegible(int servicioId, string responsable)
+    {
+        var employee = SampleData.Empleados.FirstOrDefault(item => item.Nombre.Equals(responsable, StringComparison.OrdinalIgnoreCase) && item.Cargo == "Servicios");
+        if (employee is null) return false;
+        var eligible = SampleData.EmpleadosServicios.Where(item => item.ServicioId == servicioId && item.Activo).Select(item => item.EmpleadoId).ToHashSet();
+        return eligible.Count == 0 || eligible.Contains(employee.Id);
+    }
     public CitaServicioModel Programar(int guestId,int serviceId,DateTime inicio,string responsable)
     {
         if(!NavigationService.Puede("Agenda de servicios"))throw new UnauthorizedAccessException("Tu rol no puede programar citas.");
         var guest=SampleData.Huespedes.FirstOrDefault(item=>item.Id==guestId)??throw new InvalidOperationException("Selecciona un huésped.");
         var stay=SampleData.Estancias.FirstOrDefault(item=>item.HuespedId==guestId&&item.Estado=="Activa")??throw new InvalidOperationException("No se encontró la estancia activa del huésped.");
-        var service=SampleData.Servicios.FirstOrDefault(item=>item.Id==serviceId&&item.Activo&&item.RequiereCita)??throw new InvalidOperationException("Selecciona un servicio activo que requiera cita.");
+        var service=SampleData.Servicios.FirstOrDefault(item=>item.Id==serviceId&&item.Activo&&item.Reservable&&item.RequiereCita)??throw new InvalidOperationException("Selecciona un servicio activo y reservable que requiera cita.");
+        ValidarResponsable(serviceId,responsable);
         if(inicio<=DateTime.Now)throw new InvalidOperationException("La cita debe programarse para una fecha futura.");
         if(inicio>=stay.CheckOut)throw new InvalidOperationException("La cita debe ocurrir durante la estancia activa.");
         var finish=inicio.AddMinutes(service.DuracionMinutos);
         if(HasConflict(responsable,inicio,finish,null))throw new InvalidOperationException("El responsable ya tiene una cita que se superpone con ese horario.");
-        var appointment=new CitaServicioModel(SampleData.Citas.Count==0?1:SampleData.Citas.Max(item=>item.Id)+1,guest.Id,serviceId,inicio,finish,responsable,"Confirmada"){EstanciaId=stay.Id,UsuarioConfirmaId=SesionActual.Usuario?.Id,Confirmada=DateTime.Now};SampleData.Citas.Add(appointment);return appointment;
+        var appointment=new CitaServicioModel(SampleData.Citas.Count==0?1:SampleData.Citas.Max(item=>item.Id)+1,guest.Id,serviceId,inicio,finish,responsable,"Confirmada"){EstanciaId=stay.Id,UsuarioConfirmaId=SesionActual.Usuario?.Id,Confirmada=DateTime.Now,PoliticaAplicadaJson=PoliticaHotelService.SnapshotActualServicio()};SampleData.Citas.Add(appointment);return appointment;
     }
     public void Iniciar(int citaId)
     {
@@ -657,19 +676,19 @@ public sealed class CitaServicioService
         var index=SampleData.Citas.FindIndex(item=>item.Id==citaId);if(index<0)throw new InvalidOperationException("No se encontró la cita.");
         var current=SampleData.Citas[index];if(current.Estado is "Completada" or "Cancelada")throw new InvalidOperationException("No se puede reprogramar una cita cerrada.");
         if(inicio<=DateTime.Now)throw new InvalidOperationException("La cita debe programarse en el futuro.");
-        var service=SampleData.Servicios.First(item=>item.Id==current.ServicioId);var finish=inicio.AddMinutes(service.DuracionMinutos);
+        var service=SampleData.Servicios.First(item=>item.Id==current.ServicioId);ValidarResponsable(service.Id,responsable);var finish=inicio.AddMinutes(service.DuracionMinutos);
         if(HasConflict(responsable,inicio,finish,citaId))throw new InvalidOperationException("El responsable ya tiene una cita que se superpone con ese horario.");
         var stay=current.EstanciaId is int sid?SampleData.Estancias.FirstOrDefault(item=>item.Id==sid):null;
         if(stay is not null&&inicio>=stay.CheckOut)throw new InvalidOperationException("La cita debe ocurrir antes del checkout.");
         SampleData.Citas[index]=current with{Inicio=inicio,Fin=finish,AsignadoA=responsable,Estado="Confirmada",UsuarioConfirmaId=SesionActual.Usuario?.Id,Confirmada=DateTime.Now};
         if(current.SolicitudId is int requestId){var requestIndex=SampleData.SolicitudesServicio.FindIndex(item=>item.Id==requestId);if(requestIndex>=0){var request=SampleData.SolicitudesServicio[requestIndex];var staff=SampleData.Empleados.FirstOrDefault(item=>item.Nombre==responsable);SampleData.SolicitudesServicio[requestIndex]=request with{Estado="Confirmada",FechaDeseada=inicio,Aceptada=request.Aceptada??DateTime.Now,Responsable=responsable,ResponsableId=staff?.Id};}}
     }
-    public void Completar(int citaId)
+    public void Completar(int citaId, int? convenioId = null)
     {
         if(!NavigationService.Puede("Agenda de servicios"))throw new UnauthorizedAccessException();
         var index=SampleData.Citas.FindIndex(item=>item.Id==citaId);if(index<0)throw new InvalidOperationException("No se encontró la cita.");
         var cita=SampleData.Citas[index];if(cita.Estado!="En curso")throw new InvalidOperationException("Inicia la cita antes de confirmarla como realizada.");
-        new ServicioService().RegistrarUtilizacion(SampleData.Servicios.First(service=>service.Id==cita.ServicioId),SampleData.Huespedes.First(guest=>guest.Id==cita.HuespedId),true,cita.EstanciaId,cita.SolicitudId);
+        new ServicioService().RegistrarUtilizacion(SampleData.Servicios.First(service=>service.Id==cita.ServicioId),SampleData.Huespedes.First(guest=>guest.Id==cita.HuespedId),true,cita.EstanciaId,cita.SolicitudId,convenioId,cita.Inicio);
         SampleData.Citas[index]=cita with{Estado="Completada"};
     }
     public void Cancelar(int citaId)
@@ -685,6 +704,11 @@ public sealed class CitaServicioService
         if(appointment.SolicitudId is int requestId){var requestIndex=SampleData.SolicitudesServicio.FindIndex(item=>item.Id==requestId);if(requestIndex>=0)SampleData.SolicitudesServicio[requestIndex]=SampleData.SolicitudesServicio[requestIndex] with{Estado="No presentado"};}
     }
     private static bool HasConflict(string responsible,DateTime start,DateTime finish,int? exceptId)=>SampleData.Citas.Any(item=>item.Id!=exceptId&&item.AsignadoA==responsible&&item.Estado is not ("Cancelada" or "No presentado" or "Completada")&&start<item.Fin&&finish>item.Inicio);
+    private static void ValidarResponsable(int serviceId,string responsible)
+    {
+        if (!new CitaServicioService().EsResponsableElegible(serviceId, responsible))
+            throw new InvalidOperationException("El responsable no existe como colaborador de servicios o no está asociado como elegible para este servicio.");
+    }
 }
 public sealed class InventarioService
 {
@@ -721,13 +745,24 @@ public sealed class InventarioService
         var products=lineas.Select(line=>(Line:line,Product:SampleData.Productos.First(item=>item.Id==line.ProductoId))).ToList();
         if(products.Any(item=>item.Line.Cantidad>item.Product.Stock))throw new InvalidOperationException("Una o más cantidades superan las existencias disponibles.");
         var guest=SampleData.Huespedes.First(item=>item.Id==guestId);
-        var stay=SampleData.Estancias.FirstOrDefault(item=>item.HuespedId==guestId&&item.Estado=="Activa")??throw new InvalidOperationException("No se encontró la estancia activa del huésped.");
+        var stay=SampleData.Estancias.FirstOrDefault(item=>item.Estado=="Activa"&&(item.HuespedId==guestId||SampleData.ReservaHuespedes.Any(link=>link.ReservaId==item.ReservaId&&link.HuespedId==guestId)))??throw new InvalidOperationException("No se encontró la estancia activa del huésped.");
+        var charges=products.Where(item=>!(item.Product.IncluidoEnPaquete&&guest.Paquete!="Sin paquete")&&item.Product.Precio*item.Line.Cantidad>0)
+            .Select(item=>($"Consumo · {item.Product.Nombre} × {item.Line.Cantidad}",item.Product.Precio*item.Line.Cantidad)).ToList();
+        if(charges.Count>0) new FolioService().ValidarCargosPorEstancia(charges,stay.Id);
         foreach(var (line,product) in products)
         {
             var included=product.IncluidoEnPaquete&&guest.Paquete!="Sin paquete";
-            product.Stock-=line.Cantidad;SampleData.Consumos.Add(new ConsumoModel(SampleData.Consumos.Count+1,guestId,product.Id,line.Cantidad,DateTime.Now,included){EstanciaId=stay.Id});
+            product.Stock-=line.Cantidad;
+            int? cargoId=null;
+            var amount=included?0m:product.Precio*line.Cantidad;
+            if(amount>0)
+            {
+                new FolioService().RegistrarCargoPorEstancia($"Consumo · {product.Nombre} × {line.Cantidad}",amount,stay.Id);
+                cargoId=SampleData.Cargos.Last().Id;
+            }
+            SampleData.Consumos.Add(new ConsumoModel(SampleData.Consumos.Count==0?1:SampleData.Consumos.Max(item=>item.Id)+1,guestId,product.Id,line.Cantidad,DateTime.Now,included)
+            {EstanciaId=stay.Id,PrecioUnitarioAcordado=included?0m:product.Precio,CargoId=cargoId,Origen=product.Categoria});
             RegistrarMovimiento(product,"Consumo",line.Cantidad,$"Huésped {guest.Nombre}");
-            if(!included)new FolioService().RegistrarCargoPorEstancia($"Consumo · {product.Nombre} × {line.Cantidad}",product.Precio*line.Cantidad,stay.Id);
         }
     }
     private static void RegistrarMovimiento(ProductoModel product,string tipo,int cantidad,string motivo)=>SampleData.MovimientosInventario.Insert(0,new(SampleData.MovimientosInventario.Count+1,product.Id,DateTime.Now,tipo,cantidad,motivo));
@@ -741,14 +776,21 @@ public sealed class ServicioService
         var manager=SesionActual.Usuario?.Rol=="Gerente";
         if(!manager&&!NavigationService.Puede("Catálogo de servicios"))throw new UnauthorizedAccessException("Tu rol no puede editar el catálogo de servicios.");
         if(string.IsNullOrWhiteSpace(nombre)||precio<0||duracion<15)throw new InvalidOperationException("Revisa el nombre, precio y duración del servicio.");
-        var service=new ServicioModel{Id=SampleData.Servicios.Count==0?1:SampleData.Servicios.Max(item=>item.Id)+1,Nombre=nombre.Trim(),Categoria=categoria.Trim(),Precio=manager?precio:0,RequiereCita=requiereCita,PadreId=padreId,Cobertura=manager?cobertura:"No incluido",UsosRestantes=manager?usos:null,DuracionMinutos=duracion,Proveedor=proveedor,ProductoAsociadoId=productoId};SampleData.Servicios.Add(service);return service;
+        if (!string.IsNullOrWhiteSpace(proveedor) && !proveedor.Equals("Interno",StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Los proveedores se vinculan desde Convenios; no se guarda un nombre de proveedor dentro del servicio.");
+        if (cobertura != "No incluido" || usos is not null) throw new InvalidOperationException("La cobertura se configura por paquete en Paquetes y promociones.");
+        var service=new ServicioModel{Id=SampleData.Servicios.Count==0?1:SampleData.Servicios.Max(item=>item.Id)+1,Nombre=nombre.Trim(),Categoria=categoria.Trim(),Precio=manager?precio:0,RequiereCita=requiereCita,PadreId=padreId,DuracionMinutos=duracion};SampleData.Servicios.Add(service);
+        if(productoId is int associatedProduct) SampleData.ServiciosProductos.Add(new(service.Id,associatedProduct,1));
+        return service;
     }
     public void Actualizar(ServicioModel service,string nombre,string categoria,decimal precio,bool requiereCita,string cobertura,int? usos,int duracion,string proveedor,int? productoId)
     {
         var manager=SesionActual.Usuario?.Rol=="Gerente";
         if(!manager&&!NavigationService.Puede("Catálogo de servicios"))throw new UnauthorizedAccessException("Tu rol no puede editar el catálogo de servicios.");
         if(string.IsNullOrWhiteSpace(nombre)||precio<0||duracion<15)throw new InvalidOperationException("Revisa el nombre, precio y duración del servicio.");
-        service.Nombre=nombre.Trim();service.Categoria=categoria.Trim();if(manager){service.Precio=precio;service.Cobertura=cobertura;service.UsosRestantes=usos;}service.RequiereCita=requiereCita;service.DuracionMinutos=duracion;service.Proveedor=proveedor;service.ProductoAsociadoId=productoId;
+        if (!string.IsNullOrWhiteSpace(proveedor) && !proveedor.Equals("Interno",StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Los proveedores se administran mediante relaciones de Convenios.");
+        if (cobertura != "No incluido" || usos is not null) throw new InvalidOperationException("La cobertura se administra en la relación del servicio con cada paquete.");
+        service.Nombre=nombre.Trim();service.Categoria=categoria.Trim();if(manager)service.Precio=precio;service.RequiereCita=requiereCita;service.DuracionMinutos=duracion;
+        if(productoId is int associatedProduct && !SampleData.ServiciosProductos.Any(item=>item.ServicioId==service.Id&&item.ProductoId==associatedProduct)) SampleData.ServiciosProductos.Add(new(service.Id,associatedProduct,1));
     }
     public IReadOnlyList<UsoServicioModel> ConsultarUtilizaciones(int guestId)=>SampleData.UsosServicio.Where(x=>x.HuespedId==guestId).OrderByDescending(x=>x.Fecha).ToList();
     public IReadOnlyList<UsoServicioModel> ConsultarUtilizacionesPorEstancia(int estanciaId)=>SampleData.UsosServicio.Where(x=>x.EstanciaId==estanciaId).OrderByDescending(x=>x.Fecha).ToList();
@@ -763,15 +805,15 @@ public sealed class ServicioService
     {
         var stay=SampleData.Estancias.FirstOrDefault(item=>item.HuespedId==guestId&&item.Estado=="Activa");
         if(stay is null)return [];
-        return SampleData.Servicios.Where(service=>service.Activo&&service.Reservable).Select(service=>
+        return SampleData.Servicios.Where(service=>service.Reservable).Select(service=>
         {
-            var benefit=new ServicioBeneficioService().Evaluar(stay.Id,service.Id);
+            var benefit=new ServicioBeneficioService().Evaluar(stay.Id,service.Id,huespedId:guestId);
             var purchased = benefit.PurchasedRemaining;
             var remaining=benefit.CoverageType=="Ilimitado"?"Sin límite":benefit.Allowance>0?$"{benefit.Remaining} de {benefit.Allowance} usos":"—";
             var coverage = purchased > 0 ? $"Adquirido previamente · {purchased} sesión(es)" + (benefit.Remaining > 0 ? $" · {benefit.Remaining} de paquete" : "") : benefit.CoverageType=="No incluido"?"No incluido":benefit.Label;
             if (purchased > 0) remaining = $"Paquete: {remaining} · Adquiridas: {purchased}";
-            return new ServiceBenefitRow(service.Nombre,service.Categoria,coverage,remaining,$"Bs {benefit.EstimatedCharge:N2}",service.RequiereCita);
-        }).ToList();
+            return (Service: service, Benefit: benefit, Row: new ServiceBenefitRow(service.Nombre,service.Categoria,coverage,remaining,$"Bs {benefit.EstimatedCharge:N2}",service.RequiereCita));
+        }).Where(item=>item.Service.Activo||item.Benefit.PurchasedRemaining>0||item.Benefit.Remaining>0||item.Benefit.CoverageType=="Ilimitado").Select(item=>item.Row).ToList();
     }
     public ServiceBenefitEvaluation EvaluarCobertura(int estanciaId,int servicioId,DateTime? fecha=null)=>new ServicioBeneficioService().Evaluar(estanciaId,servicioId,fecha);
     public IReadOnlyList<ServiceUsageHistoryRow> ConsultarHistorial(int guestId)=>ConsultarUtilizaciones(guestId).Select(item=>new ServiceUsageHistoryRow(item.Fecha,SampleData.Servicios.First(service=>service.Id==item.ServicioId).Nombre,item.Incluido?"Incluido":"Adicional",item.Cargo,item.Estado)).ToList();
@@ -782,22 +824,47 @@ public sealed class ServicioService
     public void RegistrarUtilizacion(ServicioModel servicio,HuespedModel huesped,bool citaConfirmada,int? estanciaId)
         => RegistrarUtilizacion(servicio,huesped,citaConfirmada,estanciaId,null);
     public void RegistrarUtilizacion(ServicioModel servicio,HuespedModel huesped,bool citaConfirmada,int? estanciaId,int? solicitudId)
+        => RegistrarUtilizacion(servicio,huesped,citaConfirmada,estanciaId,solicitudId,null);
+    public void RegistrarUtilizacion(ServicioModel servicio,HuespedModel huesped,bool citaConfirmada,int? estanciaId,int? solicitudId,int? convenioId,DateTime? fechaProgramada = null)
     {
         if(!NavigationService.Puede("Atención de servicios"))throw new UnauthorizedAccessException("Solo el equipo de servicios confirma uso.");
         if(servicio.RequiereCita&&!citaConfirmada)throw new InvalidOperationException("Este servicio requiere una cita programada.");
-        var stay=estanciaId is int id?SampleData.Estancias.FirstOrDefault(item=>item.Id==id&&item.HuespedId==huesped.Id&&item.Estado=="Activa"):SampleData.Estancias.FirstOrDefault(item=>item.HuespedId==huesped.Id&&item.Estado=="Activa");
+        var stay=estanciaId is int id?SampleData.Estancias.FirstOrDefault(item=>item.Id==id&&item.Estado=="Activa"&&(item.HuespedId==huesped.Id||SampleData.ReservaHuespedes.Any(link=>link.ReservaId==item.ReservaId&&link.HuespedId==huesped.Id))):SampleData.Estancias.FirstOrDefault(item=>item.Estado=="Activa"&&(item.HuespedId==huesped.Id||SampleData.ReservaHuespedes.Any(link=>link.ReservaId==item.ReservaId&&link.HuespedId==huesped.Id)));
         if(stay is null)throw new InvalidOperationException("No se encontró la estancia activa del huésped.");
         var requestIndex=solicitudId is int rid?SampleData.SolicitudesServicio.FindIndex(item=>item.Id==rid):-1;
         if(solicitudId is not null&&requestIndex<0)throw new InvalidOperationException("No se encontró la solicitud asociada.");
         if(requestIndex>=0&&SampleData.SolicitudesServicio[requestIndex].ProcesamientoCompleto)throw new InvalidOperationException("La solicitud ya fue procesada; no se puede duplicar el consumo.");
+        var external = new ConvenioService().EsExterno(servicio.Id);
+        var serviceDate = (fechaProgramada ?? (requestIndex >= 0 ? SampleData.SolicitudesServicio[requestIndex].FechaDeseada : null) ?? DateTime.Today).Date;
+        ConvenioServicioModel? providerLink = null;
+        if (external)
+        {
+            if (convenioId is null) throw new InvalidOperationException("Selecciona un proveedor externo antes de registrar la utilización.");
+            providerLink = SampleData.ConveniosServicios.FirstOrDefault(link => link.ConvenioId == convenioId && link.ServicioId == servicio.Id && link.Activo);
+            var agreement = providerLink is null ? null : SampleData.Convenios.FirstOrDefault(item => item.Id == providerLink.ConvenioId);
+            if (providerLink is null || agreement is null || !ConvenioService.EsVigente(agreement, serviceDate))
+                throw new InvalidOperationException($"El proveedor seleccionado no tiene un convenio vigente para la fecha del servicio ({serviceDate:dd/MM/yyyy}).");
+        }
+        else if (convenioId is not null) throw new InvalidOperationException("Este servicio no está configurado como externo.");
         if(SampleData.UsosServicio.Any(x=>x.EstanciaId==stay.Id&&x.ServicioId==servicio.Id&&x.Estado is "Confirmado" or "Completado"&&solicitudId is null))throw new InvalidOperationException("Este servicio ya tiene una utilización registrada en esta estancia.");
         var acquired = SampleData.ServiciosAdquiridos.Where(item => item.ReservaId == stay.ReservaId && item.ServicioId == servicio.Id && item.Estado == "ADQUIRIDO" && (item.HuespedId is null || item.HuespedId == huesped.Id))
             .FirstOrDefault(item => SampleData.UsosServicio.Count(usage => usage.ServicioAdquiridoId == item.ServicioAdquiridoId && usage.Estado is "Completado" or "Confirmado") < item.Cantidad);
-        var benefit=new ServicioBeneficioService().Evaluar(stay.Id,servicio.Id);
+        var benefit=new ServicioBeneficioService().Evaluar(stay.Id,servicio.Id,null,huesped.Id);
+        if(!servicio.Activo&&!benefit.Available&&requestIndex<0)throw new InvalidOperationException("El servicio está desactivado y no hay una solicitud o beneficio adquirido pendiente para esta utilización.");
         var incluido=acquired is null && benefit.CoverageType!="No incluido"&&benefit.Remaining>0;
         var charge=acquired is not null || incluido ? 0 : servicio.Precio;
-        var usage=new UsoServicioModel(SampleData.UsosServicio.Count==0?1:SampleData.UsosServicio.Max(item=>item.Id)+1,huesped.Id,servicio.Id,DateTime.Now,incluido,charge,"Completado"){EstanciaId=stay.Id,ServicioAdquiridoId=acquired?.ServicioAdquiridoId};
+        // Preserve the value attributed to this use without charging the guest again.
+        // Package benefits have no reliable per-service revenue allocation in the schema.
+        decimal? attributedPrice = acquired is not null ? acquired.PrecioUnitarioAcordado : incluido ? null : charge;
+        var usedAt = DateTime.Now;
+        var coverage = acquired is not null ? "Servicio adquirido" : incluido ? "Paquete incluido" : "Adicional";
+        var usage=new UsoServicioModel(SampleData.UsosServicio.Count==0?1:SampleData.UsosServicio.Max(item=>item.Id)+1,huesped.Id,servicio.Id,usedAt,incluido,charge,"Completado")
+        {EstanciaId=stay.Id,ServicioAdquiridoId=acquired?.ServicioAdquiridoId,ConvenioId=providerLink?.ConvenioId,CostoProveedorAplicado=providerLink?.CostoProveedor,PrecioAplicado=attributedPrice,Cobertura=coverage};
         SampleData.UsosServicio.Add(usage);
+        var reservationServiceId = SampleData.ServiciosReserva.Count == 0 ? 1 : SampleData.ServiciosReserva.Max(item => item.Id) + 1;
+        var reservationService = new ReservaServicioModel(reservationServiceId, stay.ReservaId, huesped.Id, servicio.Id, "Completado", incluido)
+        { EstanciaId = stay.Id, ServicioAdquiridoId = acquired?.ServicioAdquiridoId, ConvenioId = providerLink?.ConvenioId, CostoProveedorAplicado = providerLink?.CostoProveedor, PrecioAplicado = attributedPrice, PrecioReferencia = servicio.Precio, FechaUtilizacion = usedAt, CargoId = acquired?.CargoId };
+        SampleData.ServiciosReserva.Add(reservationService);
         if (acquired is not null && SampleData.UsosServicio.Count(item => item.ServicioAdquiridoId == acquired.ServicioAdquiridoId && item.Estado is "Completado" or "Confirmado") >= acquired.Cantidad)
         {
             var acquiredIndex = SampleData.ServiciosAdquiridos.FindIndex(item => item.ServicioAdquiridoId == acquired.ServicioAdquiridoId);
@@ -805,10 +872,11 @@ public sealed class ServicioService
         }
         int? cargoId=null;
         if(charge>0){new FolioService().RegistrarCargoPorEstancia($"{servicio.Nombre} · {huesped.Nombre}",charge,stay.Id);cargoId=SampleData.Cargos.Last().Id;}
+        if (cargoId is not null) SampleData.ServiciosReserva[SampleData.ServiciosReserva.FindIndex(item => item.Id == reservationServiceId)] = reservationService with { CargoId = cargoId };
         if(requestIndex>=0)
         {
             var request=SampleData.SolicitudesServicio[requestIndex];
-            SampleData.SolicitudesServicio[requestIndex]=request with{Estado="Completada",Completada=DateTime.Now,ProcesamientoCompleto=true,UsoServicioId=usage.Id,CargoId=cargoId};
+            SampleData.SolicitudesServicio[requestIndex]=request with{Estado="Completada",Completada=DateTime.Now,ProcesamientoCompleto=true,UsoServicioId=usage.Id,CargoId=cargoId,ConvenioId=providerLink?.ConvenioId,CostoProveedorAplicado=providerLink?.CostoProveedor};
             if(request.CitaServicioId is int appointmentId){var appointmentIndex=SampleData.Citas.FindIndex(item=>item.Id==appointmentId);if(appointmentIndex>=0)SampleData.Citas[appointmentIndex]=SampleData.Citas[appointmentIndex] with{Estado="Completada"};}
         }
     }
@@ -984,19 +1052,109 @@ public sealed partial class EstanciaService
             if (index >= 0) SampleData.ServiciosAdquiridos[index] = item with { CargoId = SampleData.Cargos.Last().Id };
         }
     }
+    public StayDirectoryMetrics ObtenerIndicadoresEstancias()
+    {
+        var active = SampleData.Estancias.Where(item => item.Estado == "Activa").ToList();
+        var rows = active.Select(item => new { Stay = item, Row = CrearFilaDirectorio(item) }).ToList();
+        return new(active.Count, active.Count(item => item.CheckOut.Date == DateTime.Today), rows.Count(item => item.Row.AttentionRequired), rows.Count(item => item.Row.Balance > 0));
+    }
+
     public IReadOnlyList<StayDirectoryEntry> ListarActivas(string busqueda="",int? piso=null)=>Listar("Activa",busqueda,piso);
     public IReadOnlyList<StayDirectoryEntry> ListarTodas(string busqueda="",int? piso=null)=>Listar(null,busqueda,piso);
-    public IReadOnlyList<StayDirectoryEntry> Listar(string? estado,string busqueda="",int? piso=null)
+    public IReadOnlyList<StayDirectoryEntry> Listar(string? estado,string busqueda="",int? piso=null,string filtroRapido="Todas las activas",string? tipoHabitacion=null)
     {
-        return SampleData.Estancias.Where(stay=>estado is null||stay.Estado==estado)
-            .Select(stay=>(Stay:stay,Guest:SampleData.Huespedes.FirstOrDefault(g=>g.Id==stay.HuespedId)))
-            .Where(item=>item.Guest is not null)
-            .Select(item=>(item.Stay,Guest:item.Guest!,Room:SampleData.Habitaciones.FirstOrDefault(room=>room.Id==(SampleData.ReservaHabitaciones.FirstOrDefault(assignment=>assignment.ReservaId==item.Stay.ReservaId)?.HabitacionId??item.Guest!.Habitacion))))
-            .Where(item=>item.Room is not null)
-            .Where(item=>piso is null||item.Room!.Piso==piso)
-            .Where(item=>string.IsNullOrWhiteSpace(busqueda)||$"{item.Guest.Nombre} {item.Room!.Numero} {item.Stay.Id}".Contains(busqueda,StringComparison.OrdinalIgnoreCase)||SampleData.ReservaHuespedes.Where(link=>link.ReservaId==item.Stay.ReservaId).Select(link=>SampleData.Huespedes.FirstOrDefault(person=>person.Id==link.HuespedId)?.Nombre).Any(name=>name?.Contains(busqueda,StringComparison.OrdinalIgnoreCase)==true))
-            .Select(item=>new StayDirectoryEntry(item.Stay.Id,item.Stay.ReservaId,item.Guest.Nombre,item.Room!.Numero,item.Room.Piso,item.Guest.Paquete,item.Stay.CheckIn,item.Stay.CheckOut,item.Stay.Estado,item.Guest.Id,item.Stay.CheckOutReal))
-            .OrderBy(item=>item.CheckOut).ToList();
+        var rows = SampleData.Estancias.Where(stay => estado is null || stay.Estado == estado)
+            .Select(CrearFilaDirectorio)
+            .Where(row => piso is null || (row.Floors.Split(',', StringSplitOptions.TrimEntries).Any(value => value == piso.Value.ToString())))
+            .Where(row => string.IsNullOrWhiteSpace(tipoHabitacion) || tipoHabitacion == "Todos los tipos" || row.RoomType.Split(',', StringSplitOptions.TrimEntries).Contains(tipoHabitacion, StringComparer.OrdinalIgnoreCase))
+            .Where(row => string.IsNullOrWhiteSpace(busqueda) ||
+                $"{row.Guest} {row.GuestDocument} {row.Room} {row.Id} {row.ReservationId} {row.Package} {row.Group} {string.Join(" ", SampleData.ReservaHuespedes.Where(link => link.ReservaId == row.ReservationId).Select(link => SampleData.Huespedes.FirstOrDefault(person => person.Id == link.HuespedId)?.Nombre))} {string.Join(" ", SampleData.ReservaHuespedes.Where(link => link.ReservaId == row.ReservationId).Select(link => SampleData.Huespedes.FirstOrDefault(person => person.Id == link.HuespedId)?.Documento))}"
+                    .Contains(busqueda.Trim(), StringComparison.OrdinalIgnoreCase))
+            .Where(row => filtroRapido switch
+            {
+                "Salidas de hoy" => row.Status == "Activa" && row.CheckOut.Date == DateTime.Today,
+                "Salidas vencidas" => row.Status == "Activa" && row.CheckOut.Date < DateTime.Today,
+                "Requieren atención" => row.Status == "Activa" && row.AttentionRequired,
+                "Con saldo" => row.Status == "Activa" && row.Balance > 0,
+                "Finalizadas" => row.Status == "Finalizada",
+                _ => true
+            })
+            .OrderBy(row => row.CheckOut).ToList();
+        return rows;
+    }
+
+    private static StayDirectoryEntry CrearFilaDirectorio(EstanciaModel stay)
+    {
+        var guest = SampleData.Huespedes.FirstOrDefault(item => item.Id == stay.HuespedId);
+        var reservation = SampleData.Reservas.FirstOrDefault(item => item.Id == stay.ReservaId);
+        var roomIds = SampleData.ReservaHabitaciones.Where(link => link.ReservaId == stay.ReservaId).Select(link => link.HabitacionId).Distinct().ToList();
+        if (roomIds.Count == 0 && reservation is not null) roomIds.Add(reservation.Habitacion);
+        if (roomIds.Count == 0 && guest is not null && guest.Habitacion > 0) roomIds.Add(guest.Habitacion);
+        var rooms = roomIds.Select(id => SampleData.Habitaciones.FirstOrDefault(room => room.Id == id)).Where(room => room is not null).Select(room => room!).ToList();
+        var roomNames = string.Join(", ", rooms.Select(room => room.Numero));
+        var floors = string.Join(",", rooms.Select(room => room.Piso).Distinct().Order());
+        var roomTypes = string.Join(",", rooms.Select(room => room.Tipo).Distinct());
+        var balance = new FolioService().CalcularSaldoPorEstancia(stay.Id);
+        var hasPendingResources = SampleData.ReservaRecursos.Any(item => item.ReservaId == stay.ReservaId && item.Estado is "SIN_VERIFICAR" or "PENDIENTE" or "ASIGNADO");
+        var roomSet = roomIds.ToHashSet();
+        var hasIncident = SampleData.Incidencias.Any(item => roomSet.Contains(item.Habitacion) && item.Estado is not ("Resuelta" or "Cerrada" or "Finalizada"));
+        var attention = stay.Estado == "Activa" && (stay.CheckOut.Date < DateTime.Today || (stay.CheckOut.Date == DateTime.Today && balance > 0) || hasPendingResources || hasIncident);
+        var groupName = reservation?.GrupoId is int groupId ? SampleData.GruposReservas.FirstOrDefault(group => group.Id == groupId)?.Nombre ?? "" : "";
+        var packageName = SampleData.ReservaPaquetes.Where(item => item.ReservaId == stay.ReservaId)
+            .Select(item => SampleData.Paquetes.FirstOrDefault(package => package.Id == item.PaqueteId)?.Nombre)
+            .Where(name => !string.IsNullOrWhiteSpace(name)).Distinct().Aggregate("", (current, name) => current.Length == 0 ? name! : current + ", " + name);
+        if (packageName.Length == 0) packageName = reservation?.Paquete ?? guest?.Paquete ?? "Sin paquete";
+        return new(stay.Id, stay.ReservaId, guest?.Nombre ?? "Huésped", roomNames, rooms.FirstOrDefault()?.Piso ?? 0, packageName, stay.CheckIn, stay.CheckOut, stay.Estado, stay.HuespedId, stay.CheckOutReal)
+        {
+            RoomType = roomTypes, Floors = floors, GuestDocument = guest?.Documento ?? "", Group = groupName, Balance = balance, AttentionRequired = attention
+        };
+    }
+
+    public StayExtensionQuote CotizarExtension(int estanciaId, DateTime nuevaSalida)
+    {
+        var stay = SampleData.Estancias.FirstOrDefault(item => item.Id == estanciaId && item.Estado == "Activa") ?? throw new InvalidOperationException("Solo se puede extender una estancia activa.");
+        if (nuevaSalida.Date <= stay.CheckOut.Date) throw new InvalidOperationException("La nueva salida debe ser posterior a la salida prevista actual.");
+        var reservation = SampleData.Reservas.FirstOrDefault(item => item.Id == stay.ReservaId) ?? throw new InvalidOperationException("No se encontró la reserva de la estancia.");
+        var rooms = ObtenerHabitacionesEstancia(stay.Id);
+        if (rooms.Count == 0) throw new InvalidOperationException("No hay habitaciones asignadas a esta estancia.");
+        var availability = new HabitacionDisponibilidadService();
+        foreach (var room in rooms)
+            if (!availability.EsDisponible(room.Id, stay.CheckOut.Date, nuevaSalida.Date, stay.ReservaId))
+                throw new InvalidOperationException($"La habitación {room.Numero} no está disponible durante todo el periodo solicitado.");
+        foreach (var allocation in SampleData.ReservaRecursos.Where(item => item.ReservaId == stay.ReservaId && item.Estado is not ("CANCELADO" or "DEVUELTO")))
+            new RecursoAdicionalService().ValidarCantidadDisponible(allocation.RecursoId, stay.CheckOut.Date, nuevaSalida.Date, allocation.Cantidad, stay.ReservaId);
+        var tariff = new TarifaService();
+        var lodging = rooms.Sum(room => tariff.CalcularAlojamiento(room, stay.CheckOut.Date, nuevaSalida.Date,reservation.Canal));
+        var resources = SampleData.ReservaRecursos.Where(item => item.ReservaId == stay.ReservaId && item.Estado is not ("CANCELADO" or "DEVUELTO") && item.TipoCobroAplicado == "POR_NOCHE")
+            .Sum(item => (item.PrecioUnitarioAcordado ?? 0m) * item.Cantidad * (nuevaSalida.Date - stay.CheckOut.Date).Days);
+        return new(stay.Id, stay.ReservaId, stay.CheckOut.Date, nuevaSalida.Date, (nuevaSalida.Date - stay.CheckOut.Date).Days, rooms.Select(item => item.Numero).ToList(), lodging, resources, lodging + resources);
+    }
+
+    public StayExtensionQuote ExtenderEstancia(int estanciaId, DateTime nuevaSalida)
+    {
+        if (!NavigationService.Puede("Estancias")) throw new UnauthorizedAccessException("Tu rol no puede extender estancias.");
+        var quote = CotizarExtension(estanciaId, nuevaSalida);
+        var stayIndex = SampleData.Estancias.FindIndex(item => item.Id == estanciaId);
+        var stay = SampleData.Estancias[stayIndex];
+        var reservation = SampleData.Reservas.First(item => item.Id == stay.ReservaId);
+        var charges = new List<(string Concepto, decimal Importe)>();
+        if (quote.Lodging > 0) charges.Add(($"Alojamiento adicional · Estancia #{stay.Id} · {quote.AdditionalNights} noche(s)", quote.Lodging));
+        if (quote.Resources > 0) charges.Add(($"Recursos por noche · extensión Estancia #{stay.Id} · {quote.AdditionalNights} noche(s)", quote.Resources));
+        if (charges.Count > 0) new FolioService().RegistrarCargosPorEstancia(charges, stay.Id);
+        SampleData.Estancias[stayIndex] = stay with { CheckOut = quote.NewDeparture };
+        reservation.Salida = quote.NewDeparture;
+        SampleData.Auditoria.Insert(0, new(DateTime.Now, SesionActual.Usuario?.Usuario ?? "demo", "Extensión de estancia", $"Estancia #{stay.Id}", $"Salida {quote.CurrentDeparture:dd/MM/yyyy} → {quote.NewDeparture:dd/MM/yyyy} · Bs {quote.Total:N2}"));
+        return quote;
+    }
+
+    public IReadOnlyList<HabitacionModel> ObtenerHabitacionesEstancia(int estanciaId)
+    {
+        var stay = SampleData.Estancias.FirstOrDefault(item => item.Id == estanciaId) ?? throw new InvalidOperationException("No se encontró la estancia.");
+        var reservation = SampleData.Reservas.FirstOrDefault(item => item.Id == stay.ReservaId);
+        var ids = SampleData.ReservaHabitaciones.Where(item => item.ReservaId == stay.ReservaId).Select(item => item.HabitacionId).Distinct().ToList();
+        if (ids.Count == 0 && reservation is not null) ids.Add(reservation.Habitacion);
+        if (ids.Count == 0) ids.Add(SampleData.Huespedes.First(item => item.Id == stay.HuespedId).Habitacion);
+        return ids.Select(id => SampleData.Habitaciones.FirstOrDefault(item => item.Id == id)).Where(item => item is not null).Select(item => item!).ToList();
     }
 
     public IReadOnlyList<StayActivityRow> ConsultarActividad(int estanciaId)
@@ -1010,6 +1168,17 @@ public sealed partial class EstanciaService
         foreach(var item in SampleData.Pagos.Where(item=>item.FolioId==folioId))items.Add(new(item.Fecha,"Pago",$"{item.Concepto} · Bs {item.Monto:N2}",item.Metodo));
         foreach(var item in SampleData.UsosServicio.Where(item=>item.EstanciaId==estanciaId))items.Add(new(item.Fecha,"Servicio",SampleData.Servicios.First(service=>service.Id==item.ServicioId).Nombre,item.Estado));
         foreach(var item in SampleData.Consumos.Where(item=>item.EstanciaId==estanciaId))items.Add(new(item.Fecha,"Consumo",$"{SampleData.Productos.First(product=>product.Id==item.ProductoId).Nombre} × {item.Cantidad}","Inventario"));
+        foreach(var item in SampleData.SolicitudesServicio.Where(item=>item.EstanciaId==estanciaId))items.Add(new(item.Solicitada,"Servicio solicitado",SampleData.Servicios.FirstOrDefault(service=>service.Id==item.ServicioId)?.Nombre??$"Servicio #{item.ServicioId}",item.Estado));
+        foreach(var item in SampleData.Citas.Where(item=>item.EstanciaId==estanciaId))items.Add(new(item.Confirmada??item.Inicio,"Cita",$"{SampleData.Servicios.FirstOrDefault(service=>service.Id==item.ServicioId)?.Nombre??"Servicio"} · {item.Inicio:dd/MM/yyyy HH:mm}",item.Estado));
+        foreach(var item in SampleData.CambiosHabitacion.Where(item=>item.EstanciaId==estanciaId))
+        {
+            var from=SampleData.Habitaciones.FirstOrDefault(room=>room.Id==item.HabitacionOrigenId)?.Numero??"—";
+            var to=SampleData.Habitaciones.FirstOrDefault(room=>room.Id==item.HabitacionDestinoId)?.Numero??"—";
+            items.Add(new(item.Fecha,"Cambio de habitación",$"{from} → {to} · {item.Motivo}","Recepción"));
+        }
+        foreach(var item in SampleData.Auditoria.Where(item=>item.Antes==$"Estancia #{estanciaId}"&&item.Cambio is "Extensión de estancia" or "Solicitud de recurso" or "Devolución de llave" or "Revocación de llave"))
+            items.Add(new(item.Fecha,item.Cambio,item.Despues,item.Usuario));
+        if(stay.CheckOutReal is DateTime checkout)items.Add(new(checkout,"Check-out","Estancia finalizada","Recepción"));
         return items.OrderByDescending(item=>item.Fecha).ToList();
     }
 
@@ -1027,22 +1196,38 @@ public sealed partial class EstanciaService
         var roomIds=reservation is null?SampleData.Huespedes.Where(item=>item.Id==stay.HuespedId&&item.Habitacion>0).Select(item=>item.Habitacion).Distinct().ToList():SampleData.ReservaHabitaciones.Where(item=>item.ReservaId==reservation.Id).Select(item=>item.HabitacionId).Distinct().ToList();
         if(roomIds.Count==0)throw new InvalidOperationException("No se encontraron habitaciones asignadas para preparar el check-out.");
         var rooms=roomIds.Select(id=>SampleData.Habitaciones.FirstOrDefault(room=>room.Id==id)??throw new InvalidOperationException("Una habitación asignada ya no existe.")).ToList();
+        var folioId=stay.FolioId??SampleData.Folios.FirstOrDefault(item=>item.EstanciaId==stay.Id)?.Id??throw new InvalidOperationException("No se encontró el folio asociado. Resuelve la relación antes del check-out.");
+        var folio=SampleData.Folios.FirstOrDefault(item=>item.Id==folioId)??throw new InvalidOperationException("El folio asociado ya no existe.");
+        if(folio.Estado!="Abierto")throw new InvalidOperationException($"El folio está en estado {folio.Estado} y no puede liquidarse desde el check-out.");
         var balance=new FolioService().CalcularSaldoPorEstancia(estanciaId);
         if(balance>0)throw new InvalidOperationException($"El folio tiene un saldo pendiente de Bs {balance:N2}.");
+        foreach(var roomId in roomIds)
+        {
+            var otherStay=SampleData.Estancias.FirstOrDefault(other=>other.Id!=stay.Id&&other.Estado=="Activa"&&
+                (SampleData.ReservaHabitaciones.Any(link=>link.ReservaId==other.ReservaId&&link.HabitacionId==roomId)
+                 ||!SampleData.ReservaHabitaciones.Any(link=>link.ReservaId==other.ReservaId)&&SampleData.Reservas.FirstOrDefault(res=>res.Id==other.ReservaId)?.Habitacion==roomId));
+            if(otherStay is not null)throw new InvalidOperationException($"La habitación {SampleData.Habitaciones.First(item=>item.Id==roomId).Numero} sigue asociada a otra estancia activa #{otherStay.Id}. Revisa las asignaciones antes de liberar el espacio.");
+        }
         var checkOutTime=DateTime.Now;
-        try{EstanciaRepositorio.RegistrarCheckOut(stay.Id,stay.FolioId,stay.ReservaId,roomIds,checkOutTime);}
+        try{EstanciaRepositorio.RegistrarCheckOut(stay.Id,folioId,stay.ReservaId,roomIds,checkOutTime);}
         catch(Exception ex){throw new InvalidOperationException("No se pudo registrar el check-out en la base de datos. "+ex.Message,ex);}
-        var index=SampleData.Estancias.FindIndex(item=>item.Id==stay.Id);
-        SampleData.Estancias[index]=stay with{Estado="Finalizada",CheckOutReal=checkOutTime};
         var cleaning=new LimpiezaService();
-        foreach(var room in rooms)
+        var roomPlan=rooms.Select(room=>
         {
             var arrivalToday=SampleData.Reservas.Any(item=>item.Habitacion==room.Id&&item.Id!=stay.ReservaId&&item.Llegada.Date==DateTime.Today&&item.Estado is "Confirmada" or "Pendiente");
+            return (Room:room,ArrivalToday:arrivalToday,NeedsTask:cleaning.TareaActiva(room.Id) is null);
+        }).ToList();
+        var index=SampleData.Estancias.FindIndex(item=>item.Id==stay.Id);
+        SampleData.Estancias[index]=stay with{Estado="Finalizada",CheckOutReal=checkOutTime};
+        foreach(var (room,arrivalToday,needsTask) in roomPlan)
+        {
             room.Estado="Disponible";room.Huesped=null;room.Limpieza="Pendiente de limpieza";
-            if(!SampleData.Tareas.Any(task=>task.Habitacion==room.Id&&task.Tipo=="Salida"&&task.Estado!="Completada"))cleaning.RegistrarCheckout(room.Id,arrivalToday);
+            if(needsTask)cleaning.RegistrarCheckout(room.Id,arrivalToday);
             foreach(var linkedGuest in SampleData.ReservaHabitacionHuespedes.Where(link=>link.ReservaId==stay.ReservaId&&SampleData.ReservaHabitaciones.Any(assignment=>assignment.ReservaHabitacionId==link.ReservaHabitacionId&&assignment.HabitacionId==room.Id)).Select(link=>SampleData.Huespedes.FirstOrDefault(person=>person.Id==link.HuespedId)).Where(person=>person is not null))if(linkedGuest!.Habitacion==room.Id)linkedGuest.Habitacion=0;
         }
         if(reservation is not null)reservation.Estado="Finalizada";
+        var folioIndex=SampleData.Folios.FindIndex(item=>item.Id==folioId);
+        SampleData.Folios[folioIndex]=folio with{Estado="Cerrado",Saldo=0};
         AuditoriaRepositorio.Registrar(new(DateTime.Now,SesionActual.Usuario?.Usuario??"demo","Check-out",$"Estancia {stay.Id}",$"Finalizada · salida prevista {stay.CheckOut:dd/MM/yyyy}"));
     }
 }
@@ -1056,7 +1241,12 @@ public sealed class LlaveService
         if(!NavigationService.Puede("Estancias"))throw new UnauthorizedAccessException();
         var stay=SampleData.Estancias.FirstOrDefault(item=>item.Id==estanciaId&&item.Estado=="Activa")??throw new InvalidOperationException("La estancia ya no está activa.");
         var guest=SampleData.Huespedes.First(item=>item.Id==stay.HuespedId);var room=SampleData.Habitaciones.First(item=>item.Id==guest.Habitacion);
-        var key=EstanciaRepositorio.NuevaLlave(stay.Id,$"CS-{room.Numero}-{(char)('A'+SampleData.Llaves.Count%4)}");SampleData.Llaves.Add(key);return key;
+        var suffix=Enumerable.Range(0,26).Select(index=>(char)('A'+index)).FirstOrDefault(candidate=>!SampleData.Llaves.Any(item=>item.EstanciaId==stay.Id&&item.Estado=="Activa"&&item.Codigo.EndsWith($"-{candidate}",StringComparison.OrdinalIgnoreCase)));
+        if(suffix==default)throw new InvalidOperationException("Se alcanzó el límite de llaves activas para esta estancia.");
+        var key=EstanciaRepositorio.NuevaLlave(stay.Id,$"CS-{room.Numero}-{suffix}");
+        SampleData.Llaves.Add(key);
+        AuditoriaRepositorio.Registrar(new(DateTime.Now,SesionActual.Usuario?.Usuario??"demo","Emisión de llave",$"Estancia #{stay.Id}",key.Codigo));
+        return key;
     }
     public LlaveModel Emitir(int guestId)
     {
@@ -1065,10 +1255,24 @@ public sealed class LlaveService
         var room=SampleData.Habitaciones.First(item=>item.Id==SampleData.Huespedes.First(g=>g.Id==guestId).Habitacion);
         var key=EstanciaRepositorio.NuevaLlave(stay.Id,$"CS-{room.Numero}-{(char)('A'+SampleData.Llaves.Count%4)}");SampleData.Llaves.Add(key);return key;
     }
+    public void RegistrarDevolucion(int keyId)
+    {
+        if(!NavigationService.Puede("Estancias"))throw new UnauthorizedAccessException("Tu rol no puede administrar llaves.");
+        var index=SampleData.Llaves.FindIndex(item=>item.Id==keyId);if(index<0)throw new InvalidOperationException("No se encontró la llave.");
+        var key=SampleData.Llaves[index];
+        if(key.Estado!="Activa")throw new InvalidOperationException("Solo se puede registrar la devolución de una llave activa.");
+        SampleData.Llaves[index]=key with{Estado="Devuelta"};
+        SampleData.Auditoria.Insert(0,new(DateTime.Now,SesionActual.Usuario?.Usuario??"demo","Devolución de llave",$"Estancia #{key.EstanciaId}",key.Codigo));
+    }
     public void Revocar(int keyId)
     {
-        var index=SampleData.Llaves.FindIndex(item=>item.Id==keyId);if(index<0)return;
-        EstanciaRepositorio.CambiarEstadoLlave(keyId,"Revocada");SampleData.Llaves[index]=SampleData.Llaves[index] with{Estado="Revocada"};
+        if(!NavigationService.Puede("Estancias"))throw new UnauthorizedAccessException("Tu rol no puede administrar llaves.");
+        var index=SampleData.Llaves.FindIndex(item=>item.Id==keyId);if(index<0)throw new InvalidOperationException("No se encontró la llave.");
+        var key=SampleData.Llaves[index];
+        if(key.Estado!="Activa")throw new InvalidOperationException("Solo se puede revocar una llave activa.");
+        EstanciaRepositorio.CambiarEstadoLlave(keyId,"Revocada");
+        SampleData.Llaves[index]=key with{Estado="Revocada"};
+        AuditoriaRepositorio.Registrar(new(DateTime.Now,SesionActual.Usuario?.Usuario??"demo","Revocación de llave",$"Estancia #{key.EstanciaId}",key.Codigo));
     }
 }
 

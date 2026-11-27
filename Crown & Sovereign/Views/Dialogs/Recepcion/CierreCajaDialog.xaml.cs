@@ -36,6 +36,7 @@ public partial class CierreCajaDialog : Window
         OpeningText.Text = $"Fondo inicial                         Bs {summary.Turno.MontoInicial:N2}";
         CashText.Text = $"Cobros en efectivo               +Bs {summary.EfectivoCobros:N2}";
         RefundText.Text = $"Devoluciones en efectivo        −Bs {summary.EfectivoDevoluciones:N2}";
+        CancellationText.Text = $"Anulaciones en efectivo          −Bs {summary.EfectivoAnulaciones:N2}";
         ExpectedText.Text = $"Bs {summary.EfectivoEsperado:N2}";
         NonCashText.Text = $"Bs {summary.NoEfectivo:N2}";
         ActualizarDiferencia();

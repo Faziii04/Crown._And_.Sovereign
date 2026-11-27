@@ -1,0 +1,26 @@
+<UserControl x:Class="Crown___Sovereign.Views.UserControls.Gerencia.Supervision.Reportes.GeneradorReportesControl"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+ <Grid Background="{StaticResource Canvas}"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+  <DockPanel Margin="0,0,0,10"><Button Content="‹ Biblioteca" Padding="10,6" Click="Back_Click"/><TextBlock x:Name="TitleText" FontSize="19" FontWeight="SemiBold" Margin="14,6,0,0"/><StackPanel Orientation="Horizontal" DockPanel.Dock="Right"><Button Content="Exportar CSV" Margin="6,0" Padding="10,6" Click="Export_Click"/><Button Content="Imprimir" Padding="10,6" Click="Print_Click"/></StackPanel></DockPanel>
+  <Grid Grid.Row="1"><Grid.ColumnDefinitions><ColumnDefinition Width="290"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+   <Border Padding="14" CornerRadius="8" BorderBrush="{StaticResource Line}" BorderThickness="1" Background="White">
+    <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
+     <TextBlock Text="Configuración" FontSize="17" FontWeight="SemiBold" Margin="0,0,0,10"/>
+     <TextBlock Text="Periodo"/><ComboBox x:Name="PeriodBox" Margin="0,4,0,8" SelectionChanged="Period_Changed"/>
+     <TextBlock Text="Desde"/><DatePicker x:Name="StartDate" Margin="0,4,0,8" SelectedDateChanged="Parameters_Changed"/>
+     <TextBlock Text="Hasta"/><DatePicker x:Name="EndDate" Margin="0,4,0,8" SelectedDateChanged="Parameters_Changed"/>
+     <StackPanel x:Name="RoomFilters"><TextBlock Text="Tipo de habitación"/><ComboBox x:Name="TypeBox" Margin="0,4,0,8" SelectionChanged="Parameters_Changed"/><TextBlock Text="Piso"/><ComboBox x:Name="FloorBox" Margin="0,4,0,8" SelectionChanged="Parameters_Changed"/></StackPanel>
+     <StackPanel x:Name="ChannelFilter"><TextBlock x:Name="ChannelLabel" Text="Canal de reserva"/><ComboBox x:Name="ChannelBox" Margin="0,4,0,8" SelectionChanged="Parameters_Changed"/></StackPanel>
+     <StackPanel x:Name="PaymentFilter"><TextBlock Text="Método de pago"/><ComboBox x:Name="PaymentBox" Margin="0,4,0,8" SelectionChanged="Parameters_Changed"/></StackPanel>
+     <StackPanel x:Name="CategoryFilter"><TextBlock Text="Categoría"/><ComboBox x:Name="CategoryBox" Margin="0,4,0,8" SelectionChanged="Parameters_Changed"/></StackPanel>
+     <StackPanel x:Name="EmployeeFilter"><TextBlock Text="Colaborador"/><ComboBox x:Name="EmployeeBox" Margin="0,4,0,8" SelectionChanged="Parameters_Changed"/></StackPanel>
+     <CheckBox x:Name="CompareBox" Content="Comparar con periodo anterior" Margin="0,8" Checked="Parameters_Changed" Unchecked="Parameters_Changed"/>
+     <TextBlock x:Name="DirtyText" TextWrapping="Wrap" Foreground="#B45309" FontWeight="SemiBold" Margin="0,4,0,8"/>
+     <Button x:Name="GenerateButton" Content="Generar reporte" Padding="12,8" Click="Generate_Click"/>
+     <Button Content="Restablecer filtros" Margin="0,8,0,0" Padding="10,6" Click="Reset_Click"/>
+    </StackPanel></ScrollViewer>
+   </Border>
+   <ContentControl Grid.Column="2" x:Name="PreviewHost"/>
+  </Grid>
+ </Grid>
+</UserControl>

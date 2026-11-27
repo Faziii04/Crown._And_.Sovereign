@@ -30,6 +30,7 @@ public sealed class ReservationSearchCriteria
     public DateTime Salida { get; set; } = DateTime.Today.AddDays(2);
     public int Personas { get; set; } = 1;
     public int Habitaciones { get; set; } = 1;
+    public string Canal { get; set; } = "Directa";
     public string? TipoHabitacion { get; set; }
     public IReadOnlyList<string> Comodidades { get; set; } = [];
 }
@@ -139,7 +140,7 @@ public sealed class ServicioAdicionalOpcion : System.ComponentModel.INotifyPrope
     public string Descripcion => Servicio.Descripcion; public decimal? PrecioUnitarioAcordado { get; set; }
     public decimal Precio => PrecioUnitarioAcordado ?? 0m;
     public string PrecioTexto => PrecioUnitarioAcordado is decimal price ? $"Bs {price:N2}" : "Precio acordado sin verificar";
-    public bool RequiereCita => Servicio.RequiereCita; public int DuracionMinutos => Servicio.DuracionMinutos; public string Proveedor => Servicio.Proveedor;
+    public bool RequiereCita => Servicio.RequiereCita; public int DuracionMinutos => Servicio.DuracionMinutos; public string Proveedor { get; set; } = "";
     public string Cobertura { get; set; } = "No incluido"; public int Incluidos { get; set; }
     public bool IncluidoIlimitado { get; set; }
     public bool HabilitarCompra => !IncluidoIlimitado && PrecioUnitarioAcordado is decimal price && price >= 0;

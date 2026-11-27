@@ -1,6 +1,8 @@
 using System.Windows;
 using System.Windows.Controls;
+using Crown___Sovereign.Data;
 using Crown___Sovereign.Services;
+using Crown___Sovereign.Views.Dialogs.Operaciones;
 
 namespace Crown___Sovereign.Views.UserControls.Operaciones.AtencionServicios;
 
@@ -17,6 +19,19 @@ public partial class SolicitudesInmediatasControl : UserControl
     private void Complete_Click(object sender,RoutedEventArgs e)
     {
         if(sender is not Button{Tag:int id})return;
-        try{_service.CompletarAtencion(id);Recargar();}catch(Exception ex){MessageBox.Show(ex.Message,"No se pudo completar",MessageBoxButton.OK,MessageBoxImage.Information);}
+        try
+        {
+            var request=SampleData.SolicitudesServicio.FirstOrDefault(item=>item.Id==id);if(request is null)return;
+            int? agreementId=null;
+            if(new ConvenioService().EsExterno(request.ServicioId))
+            {
+                var date=request.FechaDeseada??DateTime.Now;
+                var selector=new SeleccionarProveedorDialog(request.ServicioId,date){Owner=Window.GetWindow(this)};
+                if(selector.ShowDialog()!=true)return;
+                agreementId=selector.ConvenioSeleccionadoId;
+            }
+            _service.CompletarAtencion(id,agreementId);Recargar();
+        }
+        catch(Exception ex){MessageBox.Show(ex.Message,"No se pudo completar",MessageBoxButton.OK,MessageBoxImage.Information);}
     }
 }
